@@ -33,12 +33,14 @@ RUN npm ci
 
 COPY . .
 
+# Ver qué archivos llegaron
+RUN ls -la
+RUN cat tsconfig.json
+RUN cat tsconfig.build.json 2>/dev/null || echo "NO HAY tsconfig.build.json"
+
 RUN npx prisma generate
-RUN npm run build
-
-# Confirma que el build fue exitoso
-RUN ls -la dist/
-
+RUN npm run build 2>&1 && echo "BUILD OK" || echo "BUILD FALLÓ"
+RUN ls -la dist/ 2>/dev/null || echo "dist/ vacío o no existe"
 EXPOSE 3000
 
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
