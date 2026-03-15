@@ -4,17 +4,20 @@ import { whatsappService } from './notifications/whatsapp.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
+  const port = process.env.PORT || 3000;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+
   app.enableCors({
-    origin: ['http://localhost:3001', 'https://tudominio.com'],
+    origin: [frontendUrl],
     credentials: true,
   });
 
   console.log('🔄 Inicializando WhatsApp Bot...');
   await whatsappService.initialize();
 
-  await app.listen(3000);
-  console.log('🚀 Backend corriendo en http://localhost:3000');
+  await app.listen(port);
+  console.log(`🚀 Backend corriendo en puerto ${port}`);
   console.log('📱 Test WhatsApp: POST /test/whatsapp');
 }
 

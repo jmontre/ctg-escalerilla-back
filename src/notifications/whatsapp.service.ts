@@ -1,4 +1,6 @@
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import { Client, RemoteAuth } from 'whatsapp-web.js';
+import { MongoStore } from 'wwebjs-mongo';
+import mongoose from 'mongoose';
 import * as qrcode from 'qrcode-terminal';
 
 export class WhatsAppService {
@@ -6,16 +8,23 @@ export class WhatsAppService {
   private ready = false;
 
   async initialize() {
-    console.log('🔄 Inicializando WhatsApp con whatsapp-web.js...');
+    console.log('🔄 Conectando a MongoDB para sesión WhatsApp...');
+
+    await mongoose.connect(process.env.MONGODB_URI!);
+    console.log('✅ MongoDB conectado');
+
+    const store = new MongoStore({ mongoose });
 
     this.client = new Client({
-      authStrategy: new LocalAuth({
-        dataPath: '.wwebjs_auth'
+      authStrategy: new RemoteAuth({
+        store,
+        backupSyncIntervalMs: 300000, // backup cada 5 min
       }),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      }
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      },
     });
 
     this.client.on('qr', (qr) => {
@@ -24,6 +33,10 @@ export class WhatsAppService {
       console.log('╚════════════════════════════════════════╝\n');
       qrcode.generate(qr, { small: true });
       console.log('\n📱 Escanea el QR de arriba con WhatsApp\n');
+    });
+
+    this.client.on('remote_session_saved', () => {
+      console.log('💾 Sesión guardada en MongoDB');
     });
 
     this.client.on('ready', () => {
@@ -37,6 +50,7 @@ export class WhatsAppService {
 
     this.client.on('auth_failure', () => {
       console.log('❌ Error de autenticación');
+      this.ready = false;
     });
 
     this.client.on('disconnected', (reason) => {
