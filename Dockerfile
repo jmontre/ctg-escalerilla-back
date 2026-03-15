@@ -18,8 +18,11 @@ RUN npx prisma generate
 # Build
 RUN npm run build
 
+# VERIFICAR que el build existe
+RUN ls -la dist/ && echo "✅ Dist folder exists"
+
 # Exponer puerto
 EXPOSE 3000
 
 # Start
-CMD ["npm", "run", "start:prod"]
+CMD ["sh", "-c", "ls -la && ls -la dist/ && npm run start:prod"]
