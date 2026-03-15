@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  email         String    @unique
+  password_hash String
+  is_admin      Boolean   @default(false)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  
+  player        Player?
+  
+  @@map("users")
+}
+
+model Player {
+  id                String      @id @default(uuid())
+  user_id           String      @unique
+  name              String
+  email             String      @unique
+  phone             String?
+  position          Int         @unique
+  wins              Int         @default(0)
+  losses            Int         @default(0)
+  total_matches     Int         @default(0)
+  immune_until      DateTime?
+  vulnerable_until  DateTime?
+  created_at        DateTime    @default(now())
+  
+  user              User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  challenges_made     Challenge[] @relation("challenger")
+  challenges_received Challenge[] @relation("challenged")
+  ranking_history     RankingHistory[]
+  
+  @@map("players")
+}
+
+model Challenge {
+  id              String    @id @default(uuid())
+  challenger_id   String
+  challenged_id   String
+  status          String    @default("pending")
+  accept_deadline DateTime
+  play_deadline   DateTime
+  created_at      DateTime  @default(now())
+  accepted_at     DateTime?
+  played_at       DateTime?
+  resolved_at     DateTime?
+  winner_id       String?
+  final_score     String?
+  
+  challenger_result Json?
+  challenged_result Json?
+  results_match     Boolean?
+  
+  challenger      Player    @relation("challenger", fields: [challenger_id], references: [id])
+  challenged      Player    @relation("challenged", fields: [challenged_id], references: [id])
+  
+  @@map("challenges")
+}
+
+model RankingHistory {
+  id            String   @id @default(uuid())
+  player_id     String
+  position      Int
+  old_position  Int?
+  created_at    DateTime @default(now())
+  reason        String?
+  
+  player        Player   @relation(fields: [player_id], references: [id])
+  
+  @@map("ranking_history")
+}
