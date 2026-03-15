@@ -1,4 +1,3 @@
-cat > Dockerfile << 'ENDOFFILE'
 # Build stage
 FROM node:18-alpine AS builder
 
@@ -38,4 +37,3 @@ COPY --from=builder /app/dist /app/dist
 EXPOSE 3000
 
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
-ENDOFFILE
