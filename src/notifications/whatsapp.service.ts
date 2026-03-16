@@ -17,6 +17,37 @@ export class WhatsAppService {
 
     const dataPath = process.env.WHATSAPP_SESSION_PATH || '.wwebjs_auth';
 
+    // Limpiar todos los lock files de Chromium recursivamente
+    const lockFiles = [
+      path.join(dataPath, 'SingletonLock'),
+      path.join(dataPath, 'SingletonCookie'),
+      path.join(dataPath, 'SingletonSocket'),
+    ];
+
+    for (const lockFile of lockFiles) {
+      if (fs.existsSync(lockFile)) {
+        fs.unlinkSync(lockFile);
+        console.log(`🧹 Eliminado: ${lockFile}`);
+      }
+    }
+
+    // Buscar locks en subdirectorios
+    const findAndDeleteLocks = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          findAndDeleteLocks(fullPath);
+        } else if (['SingletonLock', 'SingletonCookie', 'SingletonSocket'].includes(entry.name)) {
+          fs.unlinkSync(fullPath);
+          console.log(`🧹 Eliminado: ${fullPath}`);
+        }
+      }
+    };
+
+    findAndDeleteLocks(dataPath);
+
     // Limpiar lock file de Chromium si existe
     const lockFile = path.join(dataPath, 'SingletonLock');
     if (fs.existsSync(lockFile)) {
