@@ -1,4 +1,4 @@
-FROM node:18-slim
+FROM node:20-slim
 
 ARG CACHEBUST=1
 
@@ -39,9 +39,10 @@ RUN cat tsconfig.json
 RUN cat tsconfig.build.json 2>/dev/null || echo "NO HAY tsconfig.build.json"
 
 RUN npx prisma generate
-RUN npm run build 2>&1 && echo "BUILD OK" || echo "BUILD FALLÓ"
-RUN ls -la dist/ 2>/dev/null || echo "dist/ vacío o no existe"
-RUN find dist/ -name "*.js" 2>/dev/null | head -20 || echo "ningún .js encontrado"
+RUN npx nest build 2>&1 || true
+RUN npx tsc -p tsconfig.build.json 2>&1 && echo "TSC OK" || echo "TSC FALLÓ"
+RUN find . -name "*.js" -path "*/dist/*" 2>/dev/null | head -20 || echo "ningún .js en dist"
+RUN find dist/ 2>/dev/null || echo "dist no existe"
 
 EXPOSE 3000
 
