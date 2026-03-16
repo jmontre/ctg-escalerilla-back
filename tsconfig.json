@@ -3,6 +3,7 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "rootDir": "./src",
+    "noEmit": false,
     "esModuleInterop": true,
     "declaration": true,
     "removeComments": true,
