@@ -1,5 +1,6 @@
 import { Client, LocalAuth } from 'whatsapp-web.js';
-import * as qrcode from 'qrcode-terminal';
+import * as qrcodeTerminal from 'qrcode-terminal';
+import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -48,13 +49,6 @@ export class WhatsAppService {
 
     findAndDeleteLocks(dataPath);
 
-    // Limpiar lock file de Chromium si existe
-    const lockFile = path.join(dataPath, 'SingletonLock');
-    if (fs.existsSync(lockFile)) {
-      fs.unlinkSync(lockFile);
-      console.log('🧹 Lock file de Chromium eliminado');
-    }
-
     this.client = new Client({
       authStrategy: new LocalAuth({
         dataPath,
@@ -71,17 +65,42 @@ export class WhatsAppService {
       },
     });
 
-    this.client.on('qr', (qr) => {
+    this.client.on('qr', async (qr) => {
       console.log('\n╔════════════════════════════════════════╗');
       console.log('║   ESCANEA CON WHATSAPP BUSINESS        ║');
       console.log('╚════════════════════════════════════════╝\n');
-      qrcode.generate(qr, { small: true });
-      console.log('\n📱 Escanea el QR de arriba con WhatsApp\n');
+      
+      // Mostrar en terminal también (para referencia)
+      qrcodeTerminal.generate(qr, { small: true });
+      
+      // Generar QR como imagen
+      const qrPath = path.join(process.cwd(), 'whatsapp-qr.png');
+      try {
+        await QRCode.toFile(qrPath, qr, {
+          width: 600,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF',
+          },
+        });
+        console.log(`\n✅ QR guardado como IMAGEN en: ${qrPath}`);
+        console.log('👉 Abre whatsapp-qr.png y escanéalo con tu teléfono\n');
+      } catch (error) {
+        console.error('Error generando QR como imagen:', error);
+      }
     });
 
     this.client.on('ready', () => {
       console.log('✅ WhatsApp conectado! 🎉');
       this.ready = true;
+      
+      // Eliminar el QR una vez conectado
+      const qrPath = path.join(process.cwd(), 'whatsapp-qr.png');
+      if (fs.existsSync(qrPath)) {
+        fs.unlinkSync(qrPath);
+        console.log('🗑️  QR eliminado (ya no es necesario)');
+      }
     });
 
     this.client.on('authenticated', () => {
@@ -154,6 +173,17 @@ export class WhatsAppService {
       `⏰ *RECORDATORIO*\n\n` +
       `Tu partido contra *${opponentName}* vence en *${hoursLeft} horas*.\n\n` +
       `No olvides jugar y registrar el resultado.`
+    );
+  }
+
+  async sendPasswordResetLink(playerName: string, playerPhone: string, resetLink: string) {
+    return this.sendMessage(playerPhone,
+      `🎾 *Club de Tenis Graneros*\n\n` +
+      `Hola *${playerName}*,\n\n` +
+      `Recibimos una solicitud para restablecer tu contraseña.\n\n` +
+      `👉 Haz click aquí para cambiarla:\n${resetLink}\n\n` +
+      `⏰ Este link expira en *1 hora*.\n\n` +
+      `Si no solicitaste esto, ignora este mensaje.`
     );
   }
 

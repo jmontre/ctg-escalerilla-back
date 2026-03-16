@@ -4,7 +4,7 @@ import * as bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Cambiar esta contraseña por la que quieras
+  // CAMBIAR ESTA CONTRASEÑA por la que quieras
   const NEW_ADMIN_PASSWORD = 'Mon3.26.10##';
 
   console.log('🔐 Cambiando contraseña de admin...\n');
@@ -18,7 +18,6 @@ async function main() {
 
   console.log('✅ Contraseña de admin actualizada correctamente!');
   console.log(`📋 Nueva contraseña: ${NEW_ADMIN_PASSWORD}\n`);
-  console.log('⚠️  IMPORTANTE: Guarda esta contraseña en un lugar seguro!');
 }
 
 main()
