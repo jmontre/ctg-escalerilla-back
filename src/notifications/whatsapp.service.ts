@@ -1,5 +1,7 @@
 import { Client, LocalAuth } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode-terminal';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class WhatsAppService {
   private client: Client;
@@ -15,6 +17,13 @@ export class WhatsAppService {
 
     const dataPath = process.env.WHATSAPP_SESSION_PATH || '.wwebjs_auth';
 
+    // Limpiar lock file de Chromium si existe
+    const lockFile = path.join(dataPath, 'SingletonLock');
+    if (fs.existsSync(lockFile)) {
+      fs.unlinkSync(lockFile);
+      console.log('🧹 Lock file de Chromium eliminado');
+    }
+
     this.client = new Client({
       authStrategy: new LocalAuth({
         dataPath,
@@ -22,7 +31,12 @@ export class WhatsAppService {
       puppeteer: {
         headless: true,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--single-process',
+        ],
       },
     });
 
