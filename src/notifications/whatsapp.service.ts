@@ -16,7 +16,6 @@ export class WhatsAppService {
 
     const dataPath = process.env.WHATSAPP_SESSION_PATH || '.wwebjs_auth';
 
-    // Limpiar lock files
     const lockFiles = [
       path.join(dataPath, 'SingletonLock'),
       path.join(dataPath, 'SingletonCookie'),
@@ -152,10 +151,10 @@ export class WhatsAppService {
     
     return this.sendMessage(challengedPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `¡Tienes un nuevo desafío!\n\n` +
+      `¡Tienes un nuevo desafío!\n` +
       `*${challengerName}* te ha desafiado.\n\n` +
-      `⏰ Tienes *24 horas* para aceptar o rechazar.\n\n` +
-      `👉 Haz click aquí para ver tus desafíos:\n` +
+      `⏰ Tienes 24 horas para responder.\n\n` +
+      `👉 Ver mis desafíos:\n` +
       `${appUrl}/fixture`
     );
   }
@@ -166,8 +165,8 @@ export class WhatsAppService {
     return this.sendMessage(challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
       `✅ *${challengedName}* aceptó tu desafío!\n\n` +
-      `⏰ Tienen *5 días* para jugar el partido.\n\n` +
-      `👉 Haz click aquí para coordinar:\n` +
+      `⏰ Tienen 5 días para jugar.\n\n` +
+      `👉 Coordinar partido:\n` +
       `${appUrl}/fixture`
     );
   }
@@ -178,8 +177,8 @@ export class WhatsAppService {
     return this.sendMessage(challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
       `❌ ${challengedName} rechazó tu desafío.\n\n` +
-      `🏆 ¡Ganas por W.O. y subes en la escalerilla!\n\n` +
-      `👉 Ver escalerilla actualizada:\n` +
+      `🏆 Ganas por W.O. y subes en la escalerilla!\n\n` +
+      `👉 Ver escalerilla:\n` +
       `${appUrl}`
     );
   }
@@ -190,9 +189,8 @@ export class WhatsAppService {
     return this.sendMessage(playerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
       `⏰ *RECORDATORIO*\n\n` +
-      `Tu partido contra *${opponentName}* vence en *${hoursLeft} horas*.\n\n` +
-      `No olvides jugar y registrar el resultado.\n\n` +
-      `👉 Haz click aquí para reportar:\n` +
+      `Tu partido contra *${opponentName}* vence en ${hoursLeft} horas.\n\n` +
+      `👉 Reportar resultado:\n` +
       `${appUrl}/fixture`
     );
   }
@@ -200,12 +198,11 @@ export class WhatsAppService {
   async sendPasswordResetLink(playerName: string, playerPhone: string, resetLink: string) {
     return this.sendMessage(playerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `Hola *${playerName}*,\n\n` +
-      `Recibimos una solicitud para restablecer tu contraseña.\n\n` +
-      `👉 Haz click aquí para cambiarla:\n\n` +
+      `Hola *${playerName}*\n\n` +
+      `Solicitud de cambio de contraseña.\n\n` +
+      `👉 Cambiar contraseña:\n` +
       `${resetLink}\n\n` +
-      `⏰ Este link expira en *1 hora*.\n\n` +
-      `Si no solicitaste esto, ignora este mensaje.`
+      `⏰ Expira en 1 hora.`
     );
   }
 
