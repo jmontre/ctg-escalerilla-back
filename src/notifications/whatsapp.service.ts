@@ -147,7 +147,7 @@ export class WhatsAppService {
   }
 
   async sendChallengeNotification(challengerName: string, challengedName: string, challengedPhone: string) {
-    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
     
     return this.sendMessage(challengedPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
@@ -160,7 +160,7 @@ export class WhatsAppService {
   }
 
   async sendAcceptedNotification(challengerName: string, challengedName: string, challengerPhone: string) {
-    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
     
     return this.sendMessage(challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
@@ -172,7 +172,7 @@ export class WhatsAppService {
   }
 
   async sendRejectedNotification(challengerName: string, challengedName: string, challengerPhone: string) {
-    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
     
     return this.sendMessage(challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
@@ -184,7 +184,7 @@ export class WhatsAppService {
   }
 
   async sendDeadlineReminder(playerName: string, opponentName: string, playerPhone: string, hoursLeft: number) {
-    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
     
     return this.sendMessage(playerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
