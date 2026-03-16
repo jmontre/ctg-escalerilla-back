@@ -11,15 +11,10 @@ export class ChallengeRulesService {
    * HELPER: Calcular nivel según posición
    */
   getLevel(position: number): number {
-    if (position === 1) return 1;
-    if (position <= 4) return 2;
-    if (position <= 8) return 3;
-    if (position <= 12) return 4;
-    if (position <= 17) return 5;
-    if (position <= 22) return 6;
-    if (position <= 28) return 7;
-    if (position <= 34) return 8;
-    return Math.ceil(position / 6);
+    if (position <= 12) return 1; // Categoría A
+    if (position <= 24) return 2; // Categoría B
+    if (position <= 36) return 3; // Categoría C
+    return 4; // Categoría D
   }
 
   /**
