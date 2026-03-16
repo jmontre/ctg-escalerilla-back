@@ -1,7 +1,8 @@
 FROM node:18-slim
 
-# Chromium para whatsapp-web.js
-RUN apt-get update && apt-get install -y \
+ARG CACHEBUST=1
+
+RUN apt-get update&& apt-get install -y \
     chromium \
     fonts-liberation \
     libatk-bridge2.0-0 \
