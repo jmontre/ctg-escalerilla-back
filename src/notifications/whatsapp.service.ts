@@ -1,6 +1,4 @@
 import { Client, LocalAuth } from 'whatsapp-web.js';
-import * as qrcodeTerminal from 'qrcode-terminal';
-import * as QRCode from 'qrcode';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -65,42 +63,24 @@ export class WhatsAppService {
       },
     });
 
-    this.client.on('qr', async (qr) => {
-      console.log('\n╔════════════════════════════════════════╗');
-      console.log('║   ESCANEA CON WHATSAPP BUSINESS        ║');
-      console.log('╚════════════════════════════════════════╝\n');
-      
-      // Mostrar en terminal también (para referencia)
-      qrcodeTerminal.generate(qr, { small: true });
-      
-      // Generar QR como imagen
-      const qrPath = path.join(process.cwd(), 'whatsapp-qr.png');
-      try {
-        await QRCode.toFile(qrPath, qr, {
-          width: 600,
-          margin: 2,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF',
-          },
-        });
-        console.log(`\n✅ QR guardado como IMAGEN en: ${qrPath}`);
-        console.log('👉 Abre whatsapp-qr.png y escanéalo con tu teléfono\n');
-      } catch (error) {
-        console.error('Error generando QR como imagen:', error);
-      }
+    this.client.on('qr', (qr) => {
+      console.log('\n╔════════════════════════════════════════════════════════════╗');
+      console.log('║       GENERA TU QR EN https://qr.io                       ║');
+      console.log('╚════════════════════════════════════════════════════════════╝\n');
+      console.log('📋 COPIA ESTE TEXTO COMPLETO:\n');
+      console.log('┌─────────────────────────────────────────────────────────┐');
+      console.log(qr);
+      console.log('└─────────────────────────────────────────────────────────┘\n');
+      console.log('👉 PASOS:');
+      console.log('   1. Ve a https://qr.io');
+      console.log('   2. Pega el texto de arriba en el campo "Text"');
+      console.log('   3. Genera el QR');
+      console.log('   4. Escanéalo con WhatsApp en tu teléfono\n');
     });
 
     this.client.on('ready', () => {
       console.log('✅ WhatsApp conectado! 🎉');
       this.ready = true;
-      
-      // Eliminar el QR una vez conectado
-      const qrPath = path.join(process.cwd(), 'whatsapp-qr.png');
-      if (fs.existsSync(qrPath)) {
-        fs.unlinkSync(qrPath);
-        console.log('🗑️  QR eliminado (ya no es necesario)');
-      }
     });
 
     this.client.on('authenticated', () => {
