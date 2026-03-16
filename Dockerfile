@@ -2,7 +2,7 @@ FROM node:18-slim
 
 ARG CACHEBUST=1
 
-RUN apt-get update&& apt-get install -y \
+RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
     libatk-bridge2.0-0 \
@@ -34,7 +34,6 @@ RUN npm ci
 
 COPY . .
 
-# Ver qué archivos llegaron
 RUN ls -la
 RUN cat tsconfig.json
 RUN cat tsconfig.build.json 2>/dev/null || echo "NO HAY tsconfig.build.json"
@@ -42,6 +41,8 @@ RUN cat tsconfig.build.json 2>/dev/null || echo "NO HAY tsconfig.build.json"
 RUN npx prisma generate
 RUN npm run build 2>&1 && echo "BUILD OK" || echo "BUILD FALLÓ"
 RUN ls -la dist/ 2>/dev/null || echo "dist/ vacío o no existe"
+RUN find dist/ -name "*.js" 2>/dev/null | head -20 || echo "ningún .js encontrado"
+
 EXPOSE 3000
 
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
