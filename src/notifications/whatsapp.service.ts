@@ -104,17 +104,13 @@ export class WhatsAppService {
   }
 
   private formatPhoneNumber(phone: string): string {
-    // Limpiar el número: quitar espacios, guiones, paréntesis
     let cleaned = phone.replace(/[\s\-\(\)]/g, '');
     
-    // Si empieza con +, quitarlo
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
     }
     
-    // Si NO empieza con 56 (Chile), agregarlo
     if (!cleaned.startsWith('56')) {
-      // Si empieza con 9, agregar 56
       if (cleaned.startsWith('9')) {
         cleaned = '56' + cleaned;
       } else {
@@ -135,7 +131,6 @@ export class WhatsAppService {
     try {
       const chatId = this.formatPhoneNumber(phone);
       
-      // Verificar que el número existe en WhatsApp
       const numberExists = await this.client.isRegisteredUser(chatId);
       
       if (!numberExists) {
@@ -153,38 +148,52 @@ export class WhatsAppService {
   }
 
   async sendChallengeNotification(challengerName: string, challengedName: string, challengedPhone: string) {
+    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    
     return this.sendMessage(challengedPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
       `¡Tienes un nuevo desafío!\n\n` +
       `*${challengerName}* te ha desafiado.\n\n` +
       `⏰ Tienes *24 horas* para aceptar o rechazar.\n\n` +
-      `Ingresa a la app para responder.`
+      `👉 Haz click aquí para ver tus desafíos:\n` +
+      `${appUrl}/fixture`
     );
   }
 
   async sendAcceptedNotification(challengerName: string, challengedName: string, challengerPhone: string) {
+    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    
     return this.sendMessage(challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
       `✅ *${challengedName}* aceptó tu desafío!\n\n` +
       `⏰ Tienen *5 días* para jugar el partido.\n\n` +
-      `Coordinen y no olviden registrar el resultado.`
+      `👉 Haz click aquí para coordinar:\n` +
+      `${appUrl}/fixture`
     );
   }
 
   async sendRejectedNotification(challengerName: string, challengedName: string, challengerPhone: string) {
+    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    
     return this.sendMessage(challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `${challengedName} rechazó tu desafío.\n\n` +
-      `🏆 ¡Ganas por W.O. y subes en la escalerilla!`
+      `❌ ${challengedName} rechazó tu desafío.\n\n` +
+      `🏆 ¡Ganas por W.O. y subes en la escalerilla!\n\n` +
+      `👉 Ver escalerilla actualizada:\n` +
+      `${appUrl}`
     );
   }
 
   async sendDeadlineReminder(playerName: string, opponentName: string, playerPhone: string, hoursLeft: number) {
+    const appUrl = process.env.FRONTEND_URL || 'https://ctg-escalerilla-front.vercel.app';
+    
     return this.sendMessage(playerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
       `⏰ *RECORDATORIO*\n\n` +
       `Tu partido contra *${opponentName}* vence en *${hoursLeft} horas*.\n\n` +
-      `No olvides jugar y registrar el resultado.`
+      `No olvides jugar y registrar el resultado.\n\n` +
+      `👉 Haz click aquí para reportar:\n` +
+      `${appUrl}/fixture`
     );
   }
 
@@ -193,7 +202,8 @@ export class WhatsAppService {
       `🎾 *Club de Tenis Graneros*\n\n` +
       `Hola *${playerName}*,\n\n` +
       `Recibimos una solicitud para restablecer tu contraseña.\n\n` +
-      `👉 Haz click aquí para cambiarla:\n${resetLink}\n\n` +
+      `👉 Haz click aquí para cambiarla:\n\n` +
+      `${resetLink}\n\n` +
       `⏰ Este link expira en *1 hora*.\n\n` +
       `Si no solicitaste esto, ignora este mensaje.`
     );
