@@ -100,7 +100,9 @@ export class EmailService {
       });
       return true;
     } catch (error) {
-      console.error('❌ Error al enviar email:', error);
+      console.error('❌ Error al enviar email:', JSON.stringify(error, null, 2));
+      console.error('❌ Message:', error?.message);
+      console.error('❌ Name:', error?.name);
       return false;
     }
   }
@@ -162,8 +164,8 @@ export class EmailService {
     newPosition: number
   ) {
     try {
-      const subject = won 
-        ? '🏆 ¡Ganaste el partido!' 
+      const subject = won
+        ? '🏆 ¡Ganaste el partido!'
         : '🎾 Resultado confirmado';
 
       await resend.emails.send({
@@ -180,10 +182,10 @@ export class EmailService {
                 Hola <strong>${playerName}</strong>,
               </p>
               <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
-                ${won 
-                  ? `¡Felicidades! Ganaste el partido contra <strong>${opponentName}</strong>.`
-                  : `El resultado del partido contra <strong>${opponentName}</strong> ha sido confirmado.`
-                }
+                ${won
+            ? `¡Felicidades! Ganaste el partido contra <strong>${opponentName}</strong>.`
+            : `El resultado del partido contra <strong>${opponentName}</strong> ha sido confirmado.`
+          }
               </p>
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
                 <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Resultado</p>
