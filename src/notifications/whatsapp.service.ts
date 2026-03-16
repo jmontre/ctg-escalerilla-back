@@ -16,7 +16,7 @@ export class WhatsAppService {
 
     const dataPath = process.env.WHATSAPP_SESSION_PATH || '.wwebjs_auth';
 
-    // Limpiar todos los lock files de Chromium recursivamente
+    // Limpiar lock files
     const lockFiles = [
       path.join(dataPath, 'SingletonLock'),
       path.join(dataPath, 'SingletonCookie'),
@@ -30,7 +30,6 @@ export class WhatsAppService {
       }
     }
 
-    // Buscar locks en subdirectorios
     const findAndDeleteLocks = (dir: string) => {
       if (!fs.existsSync(dir)) return;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -104,6 +103,29 @@ export class WhatsAppService {
     }
   }
 
+  private formatPhoneNumber(phone: string): string {
+    // Limpiar el número: quitar espacios, guiones, paréntesis
+    let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+    
+    // Si empieza con +, quitarlo
+    if (cleaned.startsWith('+')) {
+      cleaned = cleaned.substring(1);
+    }
+    
+    // Si NO empieza con 56 (Chile), agregarlo
+    if (!cleaned.startsWith('56')) {
+      // Si empieza con 9, agregar 56
+      if (cleaned.startsWith('9')) {
+        cleaned = '56' + cleaned;
+      } else {
+        console.warn(`⚠️ Número sospechoso: ${phone} -> ${cleaned}`);
+      }
+    }
+    
+    console.log(`📱 Formateando: ${phone} -> ${cleaned}@c.us`);
+    return cleaned + '@c.us';
+  }
+
   async sendMessage(phone: string, message: string) {
     if (!this.ready) {
       console.log('⚠️ WhatsApp no está listo');
@@ -111,11 +133,21 @@ export class WhatsAppService {
     }
 
     try {
-      const chatId = phone.includes('@') ? phone : `${phone}@c.us`;
+      const chatId = this.formatPhoneNumber(phone);
+      
+      // Verificar que el número existe en WhatsApp
+      const numberExists = await this.client.isRegisteredUser(chatId);
+      
+      if (!numberExists) {
+        console.error(`❌ El número ${phone} (${chatId}) NO está registrado en WhatsApp`);
+        return false;
+      }
+      
       await this.client.sendMessage(chatId, message);
+      console.log(`✅ Mensaje enviado exitosamente a ${phone} (${chatId})`);
       return true;
     } catch (error) {
-      console.error('❌ Error enviando mensaje:', error);
+      console.error(`❌ Error enviando mensaje a ${phone}:`, error.message || error);
       return false;
     }
   }
