@@ -6,10 +6,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const port = process.env.PORT || 3000;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
 
   app.enableCors({
-    origin: [frontendUrl],
+    origin: [
+      'http://localhost:3001',
+      'https://escalerilla.clubdetenisgraneros.cl',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean) as string[],
     credentials: true,
   });
 
