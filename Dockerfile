@@ -1,6 +1,7 @@
 FROM node:20-slim
 
 ARG CACHEBUST=1
+RUN echo "bust-$(date +%s%N)" > /dev/null
 
 RUN apt-get update && apt-get install -y \
     chromium \
