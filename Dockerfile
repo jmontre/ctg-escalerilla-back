@@ -1,8 +1,5 @@
 FROM node:20-slim
 
-ARG CACHEBUST=1
-RUN echo "bust-$(date +%s%N)" > /dev/null
-
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -35,15 +32,9 @@ RUN npm ci
 
 COPY . .
 
-RUN ls -la
-RUN cat tsconfig.json
-RUN cat tsconfig.build.json 2>/dev/null || echo "NO HAY tsconfig.build.json"
-
 RUN npx prisma generate
-RUN npx nest build 2>&1 || true
-RUN npx tsc -p tsconfig.build.json 2>&1 && echo "TSC OK" || echo "TSC FALLÓ"
-RUN find . -name "*.js" -path "*/dist/*" 2>/dev/null | head -20 || echo "ningún .js en dist"
-RUN find dist/ 2>/dev/null || echo "dist no existe"
+RUN rm -f tsconfig.build.tsbuildinfo && npx tsc -p tsconfig.build.json --noEmitOnError false
+RUN ls dist/main.js
 
 EXPOSE 3000
 
