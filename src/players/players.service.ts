@@ -18,14 +18,41 @@ export class PlayersService {
             username: true,
             is_admin: true,
           }
+        },
+        // Incluir desafíos activos (pending o accepted)
+        challenges_made: {
+          where: {
+            status: { in: ['pending', 'accepted'] }
+          },
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          include: {
+            challenged: {
+              select: { id: true, name: true, position: true }
+            }
+          }
+        },
+        challenges_received: {
+          where: {
+            status: { in: ['pending', 'accepted'] }
+          },
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          include: {
+            challenger: {
+              select: { id: true, name: true, position: true }
+            }
+          }
         }
       }
     });
 
-    // Flatten para incluir is_admin directamente en player
+    // Flatten para incluir is_admin y desafíos activos directamente en player
     return players.map(p => ({
       ...p,
       is_admin: p.user?.is_admin || false,
+      challenger_challenge: p.challenges_made[0] || null,
+      challenged_challenge: p.challenges_received[0] || null,
     }));
   }
 
