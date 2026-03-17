@@ -11,10 +11,19 @@ export class ChallengeRulesService {
    * HELPER: Calcular nivel según posición
    */
   getLevel(position: number): number {
-    if (position <= 12) return 1; // Categoría A
-    if (position <= 24) return 2; // Categoría B
-    if (position <= 36) return 3; // Categoría C
-    return 4; // Categoría D
+    if (position === 1) return 1;        // Nivel 1: pos 1
+    if (position <= 4) return 2;         // Nivel 2: pos 2-4
+    if (position <= 8) return 3;         // Nivel 3: pos 5-8
+    if (position <= 12) return 4;        // Nivel 4: pos 9-12
+    if (position <= 15) return 5;        // Nivel 5: pos 13-15
+    if (position <= 19) return 6;        // Nivel 6: pos 16-19
+    if (position <= 24) return 7;        // Nivel 7: pos 20-24
+    if (position <= 27) return 8;        // Nivel 8: pos 25-27
+    if (position <= 31) return 9;        // Nivel 9: pos 28-31
+    if (position <= 36) return 10;       // Nivel 10: pos 32-36
+    if (position <= 39) return 11;       // Nivel 11: pos 37-39
+    if (position <= 43) return 12;       // Nivel 12: pos 40-43
+    return 13;                           // Nivel 13: pos 44-48
   }
 
   /**
