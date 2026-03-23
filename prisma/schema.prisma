@@ -16,7 +16,8 @@ model User {
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
   
-  player        Player?
+  player               Player?
+  password_reset_tokens PasswordResetToken[]
   
   @@map("users")
 }
@@ -79,4 +80,17 @@ model RankingHistory {
   player        Player   @relation(fields: [player_id], references: [id])
   
   @@map("ranking_history")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }

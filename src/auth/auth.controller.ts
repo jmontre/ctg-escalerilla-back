@@ -26,4 +26,14 @@ export class AuthController {
     const token = auth.split(' ')[1];
     return this.authService.validateToken(token);
   }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { username: string }) {
+    return this.authService.forgotPassword(body.username);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    return this.authService.resetPassword(body.token, body.password);
+  }
 }
