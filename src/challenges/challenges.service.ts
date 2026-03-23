@@ -286,32 +286,25 @@ export class ChallengesService {
     try {
       const message = `🎾 *Club de Tenis Graneros*\n\n` +
         `${challenge.challenged.name} rechazó tu desafío.\n\n` +
-        `✅ Ganas por W.O. y subes en la escalerilla!`;
+        `🏆 ¡Ganas por W.O. y subes en la escalerilla!`;
 
       await Promise.all([
         challenge.challenger.phone
           ? whatsappService.sendMessage(challenge.challenger.phone, message)
-          : Promise.resolve(),
-
-        emailService.sendRejectedNotification(
-          challenge.challenger.name,
-          challenge.challenged.name,
-          challenge.challenger.email
-        )
+          : Promise.resolve()
       ]);
     } catch (error) {
       console.error('⚠️ Error al enviar notificaciones:', error);
     }
 
     return {
-      message: 'Desafío rechazado. Las posiciones han sido intercambiadas.',
-      note: `${challenge.challenger.name} sube, ${challenge.challenged.name} baja`
+      message: 'Desafío rechazado. El desafiante gana por W.O.',
     };
   }
 
   /**
-  * Ingresar resultado (confirmación dual)
-  */
+   * Ingresar resultado del partido
+   */
   async submitResult(
     challengeId: string,
     submitterId: string,
@@ -429,6 +422,88 @@ export class ChallengesService {
   }
 
   /**
+   * Fijar o actualizar la fecha acordada del partido
+   */
+  async scheduleMatch(challengeId: string, playerId: string, scheduledDate: Date) {
+    const challenge = await this.prisma.challenge.findUnique({
+      where: { id: challengeId },
+      include: {
+        challenger: {
+          select: { id: true, name: true, phone: true }
+        },
+        challenged: {
+          select: { id: true, name: true, phone: true }
+        }
+      }
+    });
+
+    if (!challenge) {
+      throw new BadRequestException('Desafío no encontrado');
+    }
+
+    if (challenge.status !== 'accepted') {
+      throw new BadRequestException('Solo puedes fijar fecha en desafíos aceptados');
+    }
+
+    const isParticipant =
+      challenge.challenger_id === playerId || challenge.challenged_id === playerId;
+
+    if (!isParticipant) {
+      throw new BadRequestException('Solo los jugadores del desafío pueden fijar la fecha');
+    }
+
+    if (scheduledDate <= new Date()) {
+      throw new BadRequestException('La fecha debe ser en el futuro');
+    }
+
+    if (scheduledDate > challenge.play_deadline) {
+      throw new BadRequestException('La fecha no puede ser posterior al plazo límite del partido');
+    }
+
+    const updated = await this.prisma.challenge.update({
+      where: { id: challengeId },
+      data: { scheduled_date: scheduledDate },
+      include: {
+        challenger: { select: { id: true, name: true, phone: true } },
+        challenged: { select: { id: true, name: true, phone: true } }
+      }
+    });
+
+    // Notificar al otro jugador
+    const isChallenger = challenge.challenger_id === playerId;
+    const setter = isChallenger ? updated.challenger : updated.challenged;
+    const other = isChallenger ? updated.challenged : updated.challenger;
+
+    const formattedDate = scheduledDate.toLocaleString('es-CL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Santiago'
+    });
+
+    try {
+      if (other.phone) {
+        await whatsappService.sendMessage(
+          other.phone,
+          `🎾 *Club de Tenis Graneros*\n\n` +
+          `📅 *${setter.name}* fijó la fecha del partido:\n\n` +
+          `*${formattedDate}*\n\n` +
+          `Si no puedes en esa fecha, coordina con tu rival.`
+        );
+      }
+    } catch (error) {
+      console.error('⚠️ Error al enviar notificación de fecha:', error);
+    }
+
+    return {
+      message: 'Fecha del partido fijada correctamente',
+      challenge: updated
+    };
+  }
+
+  /**
    * Procesar cuando ambos confirmaron el resultado
    */
   private async processDoubleConfirmation(challengeId: string) {
@@ -482,19 +557,15 @@ export class ChallengesService {
       console.log('😢 Loser ID:', loserId);
 
       try {
-        // Procesar corrimiento de posiciones
         console.log('📍 Procesando corrimiento...');
         await this.rules.processWin(challengeId, winnerId, loserId);
 
-        // Aplicar inmunidad/vulnerabilidad
         console.log('🛡️  Aplicando inmunidad/vulnerabilidad...');
         await this.rules.applyPostMatchStatus(winnerId, loserId);
 
-        // Actualizar stats
         console.log('📈 Actualizando estadísticas...');
         await this.rules.updateStats(winnerId, loserId);
 
-        // Marcar como completado
         console.log('✔️  Marcando como completado...');
         await this.prisma.challenge.update({
           where: { id: challengeId },
@@ -508,7 +579,6 @@ export class ChallengesService {
           }
         });
 
-        // Obtener jugadores actualizados
         console.log('👥 Obteniendo jugadores actualizados...');
         const winner = await this.prisma.player.findUnique({
           where: { id: winnerId },
@@ -526,7 +596,6 @@ export class ChallengesService {
         // 🚀 NOTIFICAR A AMBOS JUGADORES EL RESULTADO FINAL
         try {
           await Promise.all([
-            // Notificar al ganador
             winner.phone
               ? whatsappService.sendMessage(
                 winner.phone,
@@ -538,7 +607,6 @@ export class ChallengesService {
               )
               : Promise.resolve(),
 
-            // Notificar al perdedor
             loser.phone
               ? whatsappService.sendMessage(
                 loser.phone,
@@ -577,7 +645,6 @@ export class ChallengesService {
     } else {
       console.log('⚠️  Resultados NO coinciden');
 
-      // NO coinciden → Marcar como disputado
       await this.prisma.challenge.update({
         where: { id: challengeId },
         data: { status: 'disputed' }

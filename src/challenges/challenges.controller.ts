@@ -41,7 +41,7 @@ export class ChallengesController {
     return this.challengesService.findOne(id);
   }
 
-    /**
+  /**
    * POST /challenges/:id/accept
    * Aceptar un desafío
    */
@@ -96,5 +96,20 @@ export class ChallengesController {
         score: body.score
       }
     );
+  }
+
+  /**
+   * POST /challenges/:id/schedule
+   * Fijar o actualizar la fecha acordada del partido
+   */
+  @Post(':id/schedule')
+  scheduleMatch(
+    @Param('id') id: string,
+    @Body() body: { player_id: string; scheduled_date: string }
+  ) {
+    if (!body.player_id || !body.scheduled_date) {
+      throw new BadRequestException('player_id y scheduled_date son requeridos');
+    }
+    return this.challengesService.scheduleMatch(id, body.player_id, new Date(body.scheduled_date));
   }
 }

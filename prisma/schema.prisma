@@ -16,7 +16,7 @@ model User {
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
   
-  player               Player?
+  player                Player?
   password_reset_tokens PasswordResetToken[]
   
   @@map("users")
@@ -52,6 +52,7 @@ model Challenge {
   status          String    @default("pending")
   accept_deadline DateTime
   play_deadline   DateTime
+  scheduled_date  DateTime?
   created_at      DateTime  @default(now())
   accepted_at     DateTime?
   played_at       DateTime?
