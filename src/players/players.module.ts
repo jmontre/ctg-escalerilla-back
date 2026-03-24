@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { PlayersController } from './players.controller';
 import { PlayersService } from './players.service';
 import { AdminPlayersController } from './admin-players.controller';
@@ -7,7 +8,13 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [
+    PrismaModule,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET,
+      signOptions: { expiresIn: '7d' },
+    }),
+  ],
   controllers: [PlayersController, AdminPlayersController],
   providers: [PlayersService, AdminPlayersService, ChallengeRulesService],
   exports: [PlayersService],

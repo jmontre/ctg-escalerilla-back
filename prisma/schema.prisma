@@ -28,6 +28,7 @@ model Player {
   name              String
   email             String      @unique
   phone             String?
+  avatar_url        String?
   position          Int         @unique
   wins              Int         @default(0)
   losses            Int         @default(0)
