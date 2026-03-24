@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
-import { uploadAvatar } from './cloudinary.service';
+import { uploadAvatar, deleteAvatar } from './cloudinary.service';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -9,7 +9,7 @@ export class PlayersService {
   constructor(
     private prisma: PrismaService,
     private challengeRules: ChallengeRulesService
-  ) {}
+  ) { }
 
   async findAll() {
     const players = await this.prisma.player.findMany({
@@ -186,5 +186,23 @@ export class PlayersService {
     });
 
     return { message: 'Avatar actualizado correctamente.', avatar_url: avatarUrl };
+  }
+
+  async deleteAvatar(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { player: true }
+    });
+
+    if (!user || !user.player) throw new NotFoundException('Jugador no encontrado');
+
+    await deleteAvatar(user.player.id);
+
+    await this.prisma.player.update({
+      where: { id: user.player.id },
+      data: { avatar_url: null }
+    });
+
+    return { message: 'Foto eliminada correctamente.' };
   }
 }

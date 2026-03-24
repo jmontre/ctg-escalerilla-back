@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Param, Body, Headers, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Param, Body, Headers, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { JwtService } from '@nestjs/jwt';
 
@@ -7,7 +7,7 @@ export class PlayersController {
   constructor(
     private playersService: PlayersService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   @Get()
   findAll() {
@@ -72,5 +72,11 @@ export class PlayersController {
     } catch {
       throw new UnauthorizedException('Token inválido');
     }
+  }
+
+  @Delete('me/avatar')
+  async deleteAvatar(@Headers('authorization') auth: string) {
+    const userId = this.getUserIdFromToken(auth);
+    return this.playersService.deleteAvatar(userId);
   }
 }
