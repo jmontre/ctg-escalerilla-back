@@ -624,6 +624,20 @@ export class ChallengesService {
           console.error('⚠️ Error al enviar notificaciones de resultado:', error);
         }
 
+        // 🚀 NOTIFICAR AL GRUPO
+        try {
+          await whatsappService.sendResultToGroup(
+            challenge.challenger.name,
+            challenge.challenged.name,
+            winnerId === challenge.challenger_id ? challenge.challenger.name : challenge.challenged.name,
+            result1.score,
+            winner.position,
+            loser.position,
+          );
+        } catch (error) {
+          console.error('⚠️ Error al enviar resultado al grupo:', error);
+        }
+
         console.log('🎉 Proceso completado exitosamente');
 
         return {
