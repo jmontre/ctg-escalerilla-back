@@ -12,6 +12,11 @@ export class ChallengesService {
     private rules: ChallengeRulesService
   ) { }
 
+  // Delay entre mensajes WhatsApp para evitar errores de Puppeteer
+  private sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   /**
    * Crear nuevo desafío
    */
@@ -32,22 +37,17 @@ export class ChallengesService {
         play_deadline: add(now, { days: 5 }),
       },
       include: {
-        challenger: {
-          select: { id: true, name: true, position: true, email: true, phone: true }
-        },
-        challenged: {
-          select: { id: true, name: true, position: true, email: true, phone: true }
-        }
+        challenger: { select: { id: true, name: true, position: true, email: true, phone: true } },
+        challenged: { select: { id: true, name: true, position: true, email: true, phone: true } }
       }
     });
 
     try {
-      await Promise.all([
-        challenged.phone
-          ? whatsappService.sendChallengeNotification(challenger.name, challenged.name, challenged.phone)
-          : Promise.resolve(),
-        emailService.sendChallengeNotification(challenger.name, challenged.name, challenged.email)
-      ]);
+      if (challenged.phone) {
+        await whatsappService.sendChallengeNotification(challenger.name, challenged.name, challenged.phone);
+        await this.sleep(500);
+      }
+      await emailService.sendChallengeNotification(challenger.name, challenged.name, challenged.email);
       console.log('✅ Notificaciones enviadas');
     } catch (error) {
       console.error('⚠️ Error al enviar notificaciones:', error);
@@ -106,12 +106,11 @@ export class ChallengesService {
     });
 
     try {
-      await Promise.all([
-        updated.challenger.phone
-          ? whatsappService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.phone)
-          : Promise.resolve(),
-        emailService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.email)
-      ]);
+      if (updated.challenger.phone) {
+        await whatsappService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.phone);
+        await this.sleep(500);
+      }
+      await emailService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.email);
       console.log('✅ Notificaciones de aceptación enviadas');
     } catch (error) {
       console.error('⚠️ Error al enviar notificaciones:', error);
@@ -144,16 +143,14 @@ export class ChallengesService {
     });
 
     try {
-      const message =
-        `🎾 *Club de Tenis Graneros*\n\n` +
-        `${challenge.challenged.name} rechazó tu desafío.\n\n` +
-        `🏆 ¡Ganas por W.O. y subes en la escalerilla!`;
-
-      await Promise.all([
-        challenge.challenger.phone
-          ? whatsappService.sendMessage(challenge.challenger.phone, message)
-          : Promise.resolve()
-      ]);
+      if (challenge.challenger.phone) {
+        await whatsappService.sendMessage(
+          challenge.challenger.phone,
+          `🎾 *Club de Tenis Graneros*\n\n` +
+          `${challenge.challenged.name} rechazó tu desafío.\n\n` +
+          `🏆 ¡Ganas por W.O. y subes en la escalerilla!`
+        );
+      }
     } catch (error) {
       console.error('⚠️ Error al enviar notificaciones:', error);
     }
@@ -206,16 +203,14 @@ export class ChallengesService {
       const currentPlayer = isChallenger ? updated.challenger : updated.challenged;
 
       try {
-        const message =
-          `🎾 *Club de Tenis Graneros*\n\n` +
-          `${currentPlayer.name} ya ingresó el resultado del partido.\n\n` +
-          `¡No olvides ingresar tu resultado también!`;
-
-        await Promise.all([
-          otherPlayer.phone
-            ? whatsappService.sendMessage(otherPlayer.phone, message)
-            : Promise.resolve()
-        ]);
+        if (otherPlayer.phone) {
+          await whatsappService.sendMessage(
+            otherPlayer.phone,
+            `🎾 *Club de Tenis Graneros*\n\n` +
+            `${currentPlayer.name} ya ingresó el resultado del partido.\n\n` +
+            `¡No olvides ingresar tu resultado también!`
+          );
+        }
       } catch (error) {
         console.error('⚠️ Error al enviar notificación:', error);
       }
@@ -260,14 +255,14 @@ export class ChallengesService {
       }
     });
 
-    const isChallenger = challenge.challenger_id === playerId;
+    const isChallenger  = challenge.challenger_id === playerId;
     const setter = isChallenger ? updated.challenger : updated.challenged;
     const other  = isChallenger ? updated.challenged : updated.challenger;
 
     const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-    const weekday = scheduledDate.toLocaleDateString('es-CL',  { weekday: 'long', timeZone: 'America/Santiago' });
-    const day     = scheduledDate.toLocaleDateString('es-CL',  { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
-    const hour    = scheduledDate.toLocaleTimeString('es-CL',  { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+    const weekday = scheduledDate.toLocaleDateString('es-CL', { weekday: 'long', timeZone: 'America/Santiago' });
+    const day     = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
+    const hour    = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
 
     // Notificar al otro jugador
@@ -280,6 +275,7 @@ export class ChallengesService {
           `*${formattedDate}*\n\n` +
           `Si no puedes en esa fecha, coordina con tu rival.`
         );
+        await this.sleep(500);
       }
     } catch (error) {
       console.error('⚠️ Error al enviar notificación de fecha:', error);
@@ -349,12 +345,12 @@ export class ChallengesService {
         await this.prisma.challenge.update({
           where: { id: challengeId },
           data: {
-            status:      'completed',
-            winner_id:   winnerId,
-            final_score: result1.score,
+            status:        'completed',
+            winner_id:     winnerId,
+            final_score:   result1.score,
             results_match: true,
-            played_at:   new Date(),
-            resolved_at: new Date()
+            played_at:     new Date(),
+            resolved_at:   new Date()
           }
         });
 
@@ -370,30 +366,30 @@ export class ChallengesService {
 
         if (!winner || !loser) throw new BadRequestException('Jugador no encontrado después de actualizar');
 
-        // 🚀 NOTIFICAR A AMBOS JUGADORES EL RESULTADO FINAL
+        // 🚀 NOTIFICAR A AMBOS JUGADORES — secuencial con delay
         try {
-          await Promise.all([
-            winner.phone
-              ? whatsappService.sendMessage(
-                  winner.phone,
-                  `🎾 *Club de Tenis Graneros*\n\n` +
-                  `🏆 ¡FELICIDADES!\n\n` +
-                  `Ganaste el partido contra ${loser.name}\n` +
-                  `Score: ${result1.score}\n\n` +
-                  `Nueva posición: #${winner.position}`
-                )
-              : Promise.resolve(),
-            loser.phone
-              ? whatsappService.sendMessage(
-                  loser.phone,
-                  `🎾 *Club de Tenis Graneros*\n\n` +
-                  `Resultado confirmado\n\n` +
-                  `Partido vs ${winner.name}\n` +
-                  `Score: ${result1.score}\n\n` +
-                  `Nueva posición: #${loser.position}`
-                )
-              : Promise.resolve()
-          ]);
+          if (winner.phone) {
+            await whatsappService.sendMessage(
+              winner.phone,
+              `🎾 *Club de Tenis Graneros*\n\n` +
+              `🏆 ¡FELICIDADES!\n\n` +
+              `Ganaste el partido contra ${loser.name}\n` +
+              `Score: ${result1.score}\n\n` +
+              `Nueva posición: #${winner.position}`
+            );
+            await this.sleep(600);
+          }
+          if (loser.phone) {
+            await whatsappService.sendMessage(
+              loser.phone,
+              `🎾 *Club de Tenis Graneros*\n\n` +
+              `Resultado confirmado\n\n` +
+              `Partido vs ${winner.name}\n` +
+              `Score: ${result1.score}\n\n` +
+              `Nueva posición: #${loser.position}`
+            );
+            await this.sleep(600);
+          }
           console.log('✅ Notificaciones de resultado enviadas');
         } catch (error) {
           console.error('⚠️ Error al enviar notificaciones de resultado:', error);
@@ -441,23 +437,22 @@ export class ChallengesService {
           `${challenge.challenger.name} dice: ${result1.score}\n` +
           `${challenge.challenged.name} dice: ${result2.score}`;
 
-        await Promise.all([
-          challenge.challenger.phone
-            ? whatsappService.sendMessage(challenge.challenger.phone, message)
-            : Promise.resolve(),
-          challenge.challenged.phone
-            ? whatsappService.sendMessage(challenge.challenged.phone, message)
-            : Promise.resolve()
-        ]);
+        if (challenge.challenger.phone) {
+          await whatsappService.sendMessage(challenge.challenger.phone, message);
+          await this.sleep(600);
+        }
+        if (challenge.challenged.phone) {
+          await whatsappService.sendMessage(challenge.challenged.phone, message);
+        }
       } catch (error) {
         console.error('⚠️ Error al enviar notificaciones de disputa:', error);
       }
 
       return {
-        message:          'Los resultados no coinciden. Un administrador debe revisar el caso.',
-        status:           'disputed',
-        challenger_says:  result1,
-        challenged_says:  result2
+        message:         'Los resultados no coinciden. Un administrador debe revisar el caso.',
+        status:          'disputed',
+        challenger_says: result1,
+        challenged_says: result2
       };
     }
   }
