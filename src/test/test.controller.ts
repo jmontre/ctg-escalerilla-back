@@ -15,4 +15,13 @@ export class TestController {
     const groups = await whatsappService.getGroups();
     return { groups };
   }
+
+  @Post('grupo')
+  async testGrupo(@Body() body: { message: string }) {
+    const result = await whatsappService.sendGroupMessage(
+      process.env.WHATSAPP_GROUP_ID!,
+      body.message
+    );
+    return { success: result };
+  }
 }
