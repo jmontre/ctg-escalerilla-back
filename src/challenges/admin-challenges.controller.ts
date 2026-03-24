@@ -18,6 +18,11 @@ export class AdminChallengesController {
     return this.adminService.cancelChallenge(id);
   }
 
+  @Delete(':id/force')
+  async forceDelete(@Param('id') id: string) {
+    return this.adminService.forceDelete(id);
+  }
+
   @Post(':id/extend')
   async extendDeadline(
     @Param('id') id: string,
