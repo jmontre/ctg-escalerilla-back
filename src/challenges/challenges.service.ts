@@ -185,7 +185,12 @@ export class ChallengesService {
       throw new BadRequestException('El ganador debe ser uno de los jugadores del desafío');
     }
 
-    const updateData = isChallenger ? { challenger_result: result } : { challenged_result: result };
+    // Guardar first_result_at solo si es el primer resultado ingresado
+    const isFirstResult = !challenge.challenger_result && !challenge.challenged_result;
+    const updateData = {
+      ...(isChallenger ? { challenger_result: result } : { challenged_result: result }),
+      ...(isFirstResult ? { first_result_at: new Date() } : {}),
+    };
     await this.prisma.challenge.update({ where: { id: challengeId }, data: updateData });
 
     const updated = await this.prisma.challenge.findUnique({
@@ -199,7 +204,7 @@ export class ChallengesService {
     if (!updated) throw new BadRequestException('Error al actualizar desafío');
 
     if (!updated.challenger_result || !updated.challenged_result) {
-      const otherPlayer   = isChallenger ? updated.challenged : updated.challenger;
+      const otherPlayer = isChallenger ? updated.challenged : updated.challenger;
       const currentPlayer = isChallenger ? updated.challenger : updated.challenged;
 
       try {
@@ -255,14 +260,14 @@ export class ChallengesService {
       }
     });
 
-    const isChallenger  = challenge.challenger_id === playerId;
+    const isChallenger = challenge.challenger_id === playerId;
     const setter = isChallenger ? updated.challenger : updated.challenged;
-    const other  = isChallenger ? updated.challenged : updated.challenger;
+    const other = isChallenger ? updated.challenged : updated.challenger;
 
     const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     const weekday = scheduledDate.toLocaleDateString('es-CL', { weekday: 'long', timeZone: 'America/Santiago' });
-    const day     = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
-    const hour    = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+    const day = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
+    const hour = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
 
     // Notificar al otro jugador
@@ -326,7 +331,7 @@ export class ChallengesService {
       console.log('✅ Resultados coinciden. Procesando...');
 
       const winnerId = result1.winnerId;
-      const loserId  = winnerId === challenge.challenger_id ? challenge.challenged_id : challenge.challenger_id;
+      const loserId = winnerId === challenge.challenger_id ? challenge.challenged_id : challenge.challenger_id;
 
       console.log('🏆 Winner ID:', winnerId);
       console.log('😢 Loser ID:', loserId);
@@ -345,12 +350,12 @@ export class ChallengesService {
         await this.prisma.challenge.update({
           where: { id: challengeId },
           data: {
-            status:        'completed',
-            winner_id:     winnerId,
-            final_score:   result1.score,
+            status: 'completed',
+            winner_id: winnerId,
+            final_score: result1.score,
             results_match: true,
-            played_at:     new Date(),
-            resolved_at:   new Date()
+            played_at: new Date(),
+            resolved_at: new Date()
           }
         });
 
@@ -413,9 +418,9 @@ export class ChallengesService {
 
         return {
           message: 'Resultado confirmado. Posiciones actualizadas.',
-          winner:  { name: winner.name, new_position: winner.position },
-          loser:   { name: loser.name,  new_position: loser.position  },
-          score:   result1.score
+          winner: { name: winner.name, new_position: winner.position },
+          loser: { name: loser.name, new_position: loser.position },
+          score: result1.score
         };
       } catch (error) {
         console.error('❌ Error en processDoubleConfirmation:', error);
@@ -426,7 +431,7 @@ export class ChallengesService {
 
       await this.prisma.challenge.update({
         where: { id: challengeId },
-        data:  { status: 'disputed' }
+        data: { status: 'disputed' }
       });
 
       try {
@@ -449,8 +454,8 @@ export class ChallengesService {
       }
 
       return {
-        message:         'Los resultados no coinciden. Un administrador debe revisar el caso.',
-        status:          'disputed',
+        message: 'Los resultados no coinciden. Un administrador debe revisar el caso.',
+        status: 'disputed',
         challenger_says: result1,
         challenged_says: result2
       };

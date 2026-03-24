@@ -46,19 +46,20 @@ model Player {
 }
 
 model Challenge {
-  id              String    @id @default(uuid())
-  challenger_id   String
-  challenged_id   String
-  status          String    @default("pending")
-  accept_deadline DateTime
-  play_deadline   DateTime
-  scheduled_date  DateTime?
-  created_at      DateTime  @default(now())
-  accepted_at     DateTime?
-  played_at       DateTime?
-  resolved_at     DateTime?
-  winner_id       String?
-  final_score     String?
+  id               String    @id @default(uuid())
+  challenger_id    String
+  challenged_id    String
+  status           String    @default("pending")
+  accept_deadline  DateTime
+  play_deadline    DateTime
+  scheduled_date   DateTime?
+  created_at       DateTime  @default(now())
+  accepted_at      DateTime?
+  first_result_at  DateTime?
+  played_at        DateTime?
+  resolved_at      DateTime?
+  winner_id        String?
+  final_score      String?
   
   challenger_result Json?
   challenged_result Json?
