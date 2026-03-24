@@ -146,6 +146,78 @@ export class WhatsAppService {
     }
   }
 
+  // ─── Grupos ───────────────────────────────────────────────────────────────
+
+  async getGroups() {
+    if (!this.ready) {
+      console.log('⚠️ WhatsApp no está listo');
+      return [];
+    }
+
+    try {
+      const chats = await this.client.getChats();
+      const groups = chats
+        .filter((chat) => chat.isGroup)
+        .map((chat) => ({
+          id: chat.id._serialized,
+          name: chat.name,
+        }));
+
+      console.log(`📋 Grupos encontrados: ${groups.length}`);
+      groups.forEach(g => console.log(`  - ${g.name}: ${g.id}`));
+
+      return groups;
+    } catch (error) {
+      console.error('❌ Error obteniendo grupos:', error.message || error);
+      return [];
+    }
+  }
+
+  async sendGroupMessage(groupId: string, message: string) {
+    if (!this.ready) {
+      console.log('⚠️ WhatsApp no está listo');
+      return false;
+    }
+
+    try {
+      await this.client.sendMessage(groupId, message);
+      console.log(`✅ Mensaje enviado al grupo ${groupId}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Error enviando mensaje al grupo:`, error.message || error);
+      return false;
+    }
+  }
+
+  async sendResultToGroup(
+    challengerName: string,
+    challengedName: string,
+    winnerName: string,
+    score: string,
+    newWinnerPosition: number,
+    newLoserPosition: number,
+  ) {
+    const groupId = process.env.WHATSAPP_GROUP_ID;
+    if (!groupId) {
+      console.log('⚠️ WHATSAPP_GROUP_ID no configurado, omitiendo notificación al grupo');
+      return false;
+    }
+
+    const loserName = winnerName === challengerName ? challengedName : challengerName;
+
+    return this.sendGroupMessage(
+      groupId,
+      `🎾 *Club de Tenis Graneros - Resultado*\n\n` +
+      `🏆 *${winnerName}* venció a *${loserName}*\n` +
+      `📊 Score: *${score}*\n\n` +
+      `📈 Nuevas posiciones:\n` +
+      `  • ${winnerName}: #${newWinnerPosition}\n` +
+      `  • ${loserName}: #${newLoserPosition}`
+    );
+  }
+
+  // ─── Notificaciones existentes ────────────────────────────────────────────
+
   async sendChallengeNotification(challengerName: string, challengedName: string, challengedPhone: string) {
     const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
     

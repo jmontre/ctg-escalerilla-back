@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Get, Body } from '@nestjs/common';
 import { whatsappService } from '../notifications/whatsapp.service';
 
 @Controller('test')
@@ -8,5 +8,11 @@ export class TestController {
     console.log(`📱 Enviando mensaje a ${body.phone}...`);
     const result = await whatsappService.sendMessage(body.phone, body.message);
     return { success: result, phone: body.phone };
+  }
+
+  @Get('grupos')
+  async getGroups() {
+    const groups = await whatsappService.getGroups();
+    return { groups };
   }
 }
