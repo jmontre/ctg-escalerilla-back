@@ -8,80 +8,84 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  username      String    @unique
-  email         String    @unique
+  id            String   @id @default(uuid())
+  username      String   @unique
+  email         String   @unique
   password_hash String
-  is_admin      Boolean   @default(false)
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
-  
+  is_admin      Boolean  @default(false)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
   player                Player?
   password_reset_tokens PasswordResetToken[]
-  
+
   @@map("users")
 }
 
 model Player {
-  id                String      @id @default(uuid())
-  user_id           String      @unique
-  name              String
-  email             String      @unique
-  phone             String?
-  avatar_url        String?
-  position          Int         @unique
-  wins              Int         @default(0)
-  losses            Int         @default(0)
-  total_matches     Int         @default(0)
-  immune_until      DateTime?
-  vulnerable_until  DateTime?
-  created_at        DateTime    @default(now())
-  
-  user              User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  
-  challenges_made     Challenge[] @relation("challenger")
-  challenges_received Challenge[] @relation("challenged")
-  ranking_history     RankingHistory[]
-  
+  id               String    @id @default(uuid())
+  user_id          String    @unique
+  name             String
+  email            String    @unique
+  phone            String?
+  avatar_url       String?
+  position         Int       @unique
+  wins             Int       @default(0)
+  losses           Int       @default(0)
+  total_matches    Int       @default(0)
+  immune_until     DateTime?
+  vulnerable_until DateTime?
+  created_at       DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  challenges_made      Challenge[]         @relation("challenger")
+  challenges_received  Challenge[]         @relation("challenged")
+  ranking_history      RankingHistory[]
+  master_group_players MasterGroupPlayer[]
+  master_matches_p1    MasterMatch[]       @relation("master_player1")
+  master_matches_p2    MasterMatch[]       @relation("master_player2")
+  master_matches_won   MasterMatch[]       @relation("master_winner")
+
   @@map("players")
 }
 
 model Challenge {
-  id               String    @id @default(uuid())
-  challenger_id    String
-  challenged_id    String
-  status           String    @default("pending")
-  accept_deadline  DateTime
-  play_deadline    DateTime
-  scheduled_date   DateTime?
-  created_at       DateTime  @default(now())
-  accepted_at      DateTime?
-  first_result_at  DateTime?
-  played_at        DateTime?
-  resolved_at      DateTime?
-  winner_id        String?
-  final_score      String?
-  
+  id              String    @id @default(uuid())
+  challenger_id   String
+  challenged_id   String
+  status          String    @default("pending")
+  accept_deadline DateTime
+  play_deadline   DateTime
+  scheduled_date  DateTime?
+  created_at      DateTime  @default(now())
+  accepted_at     DateTime?
+  first_result_at DateTime?
+  played_at       DateTime?
+  resolved_at     DateTime?
+  winner_id       String?
+  final_score     String?
+
   challenger_result Json?
   challenged_result Json?
   results_match     Boolean?
-  
-  challenger      Player    @relation("challenger", fields: [challenger_id], references: [id])
-  challenged      Player    @relation("challenged", fields: [challenged_id], references: [id])
-  
+
+  challenger Player @relation("challenger", fields: [challenger_id], references: [id])
+  challenged Player @relation("challenged", fields: [challenged_id], references: [id])
+
   @@map("challenges")
 }
 
 model RankingHistory {
-  id            String   @id @default(uuid())
-  player_id     String
-  position      Int
-  old_position  Int?
-  created_at    DateTime @default(now())
-  reason        String?
-  
-  player        Player   @relation(fields: [player_id], references: [id])
-  
+  id           String   @id @default(uuid())
+  player_id    String
+  position     Int
+  old_position Int?
+  created_at   DateTime @default(now())
+  reason       String?
+
+  player Player @relation(fields: [player_id], references: [id])
+
   @@map("ranking_history")
 }
 
@@ -93,7 +97,78 @@ model PasswordResetToken {
   used       Boolean  @default(false)
   created_at DateTime @default(now())
 
-  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+// ─── MASTER TOURNAMENT ────────────────────────────────────────────────────────
+
+model MasterSeason {
+  id                String    @id @default(uuid())
+  name              String // "1er Semestre 2026"
+  category          String // "A" | "B" | "C" | "D"
+  status            String    @default("pending")
+  // pending → active (round robin) → semifinals → final → completed
+  round_robin_start DateTime?
+  round_robin_end   DateTime?
+  final_date        DateTime?
+  created_at        DateTime  @default(now())
+
+  groups MasterGroup[]
+
+  @@map("master_seasons")
+}
+
+model MasterGroup {
+  id         String   @id @default(uuid())
+  season_id  String
+  name       String // "Grupo A" | "Grupo B"
+  created_at DateTime @default(now())
+
+  season  MasterSeason        @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  players MasterGroupPlayer[]
+  matches MasterMatch[]       @relation("group_matches")
+
+  @@map("master_groups")
+}
+
+model MasterGroupPlayer {
+  id         String   @id @default(uuid())
+  group_id   String
+  player_id  String
+  // Estadísticas del round robin
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  sets_won   Int      @default(0)
+  sets_lost  Int      @default(0)
+  created_at DateTime @default(now())
+
+  group  MasterGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  player Player      @relation(fields: [player_id], references: [id])
+
+  @@unique([group_id, player_id])
+  @@map("master_group_players")
+}
+
+model MasterMatch {
+  id             String    @id @default(uuid())
+  group_id       String?
+  season_id      String
+  round          String
+  player1_id     String
+  player2_id     String
+  winner_id      String?
+  score          String?
+  status         String    @default("pending")
+  scheduled_date DateTime? // ← AGREGA ESTA LÍNEA
+  played_at      DateTime?
+  created_at     DateTime  @default(now())
+
+  group   MasterGroup? @relation("group_matches", fields: [group_id], references: [id])
+  player1 Player       @relation("master_player1", fields: [player1_id], references: [id])
+  player2 Player       @relation("master_player2", fields: [player2_id], references: [id])
+  winner  Player?      @relation("master_winner", fields: [winner_id], references: [id])
+
+  @@map("master_matches")
 }

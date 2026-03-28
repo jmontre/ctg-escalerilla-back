@@ -1,0 +1,441 @@
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { whatsappService } from '../notifications/whatsapp.service';
+
+const CATEGORY_RANGES: Record<string, [number, number]> = {
+  A: [1, 12],
+  B: [13, 24],
+  C: [25, 36],
+  D: [37, 48],
+};
+
+@Injectable()
+export class MasterService {
+  constructor(private prisma: PrismaService) { }
+
+  private sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Envío seguro — si WhatsApp falla, loguea y continúa
+  private async sendWsp(phone: string | null | undefined, message: string) {
+    if (!phone) return;
+    try {
+      await whatsappService.sendMessage(phone, message);
+      console.log(`📱 WhatsApp enviado a ${phone}`);
+    } catch (err) {
+      console.log(`📱 [LOG WSP → ${phone}]\n${message}`);
+    }
+  }
+
+  private async sendWspGroup(message: string) {
+    const groupId = process.env.WHATSAPP_GROUP_ID;
+    if (!groupId) { console.log(`📱 [LOG GRUPO]\n${message}`); return; }
+    try {
+      await whatsappService.sendGroupMessage(groupId, message);
+      console.log('📱 Mensaje enviado al grupo');
+    } catch (err) {
+      console.log(`📱 [LOG GRUPO]\n${message}`);
+    }
+  }
+
+  /**
+   * Obtener todos los torneos master
+   */
+  async findAll() {
+    return this.prisma.masterSeason.findMany({
+      include: {
+        groups: {
+          include: {
+            players: { include: { player: true } },
+            matches: {
+              include: { player1: true, player2: true, winner: true }
+            }
+          }
+        }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+  }
+
+  /**
+   * Obtener torneo por categoría
+   */
+  async findByCategory(category: string) {
+    return this.prisma.masterSeason.findFirst({
+      where: { category },
+      orderBy: { created_at: 'desc' },
+      include: {
+        groups: {
+          include: {
+            players: {
+              include: { player: true },
+              orderBy: [{ wins: 'desc' }, { sets_won: 'desc' }]
+            },
+            matches: {
+              include: { player1: true, player2: true, winner: true },
+              orderBy: { created_at: 'asc' }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Generar torneo Master para una categoría (serpenteo)
+   * Envía notificaciones WhatsApp a todos los participantes
+   */
+  async generateMaster(data: {
+    category: string;
+    name: string;
+    round_robin_start?: string;
+    round_robin_end?: string;
+    final_date?: string;
+  }) {
+    const range = CATEGORY_RANGES[data.category];
+    if (!range) throw new BadRequestException('Categoría inválida. Usa A, B, C o D.');
+
+    const existing = await this.prisma.masterSeason.findFirst({
+      where: { category: data.category, status: { not: 'completed' } }
+    });
+    if (existing) {
+      throw new BadRequestException(`Ya existe un torneo activo para la Categoría ${data.category}.`);
+    }
+
+    const players = await this.prisma.player.findMany({
+      where: { position: { gte: range[0], lte: range[1] } },
+      orderBy: { position: 'asc' },
+      take: 8
+    });
+
+    if (players.length < 8) {
+      throw new BadRequestException(
+        `La Categoría ${data.category} tiene solo ${players.length} jugadores. Se necesitan 8.`
+      );
+    }
+
+    // Serpenteo: 1,4,5,8 → Grupo A | 2,3,6,7 → Grupo B
+    const grupoA = [players[0], players[3], players[4], players[7]];
+    const grupoB = [players[1], players[2], players[5], players[6]];
+
+    const season = await this.prisma.masterSeason.create({
+      data: {
+        name: data.name,
+        category: data.category,
+        status: 'active',
+        round_robin_start: data.round_robin_start ? new Date(data.round_robin_start) : null,
+        round_robin_end: data.round_robin_end ? new Date(data.round_robin_end) : null,
+        final_date: data.final_date ? new Date(data.final_date) : null,
+      }
+    });
+
+    const groups: Array<{ name: string; players: typeof players }> = [
+      { name: 'Grupo A', players: grupoA },
+      { name: 'Grupo B', players: grupoB },
+    ];
+
+    for (const { name: groupName, players: groupPlayers } of groups) {
+      const group = await this.prisma.masterGroup.create({
+        data: { season_id: season.id, name: groupName }
+      });
+
+      for (const player of groupPlayers) {
+        await this.prisma.masterGroupPlayer.create({
+          data: { group_id: group.id, player_id: player.id }
+        });
+      }
+
+      for (let i = 0; i < groupPlayers.length; i++) {
+        for (let j = i + 1; j < groupPlayers.length; j++) {
+          await this.prisma.masterMatch.create({
+            data: {
+              group_id: group.id,
+              season_id: season.id,
+              round: 'group',
+              player1_id: groupPlayers[i].id,
+              player2_id: groupPlayers[j].id,
+              status: 'pending',
+            }
+          });
+        }
+      }
+    }
+
+    // 🚀 NOTIFICACIONES WhatsApp
+    // Notificar a cada jugador con su grupo y rivales
+    for (const { name: groupName, players: groupPlayers } of groups) {
+      const rivalNames = groupPlayers.map(p => p.name).join(', ');
+      for (const player of groupPlayers) {
+        await this.sendWsp(
+          player.phone,
+          `🏆 *Master CTG — Categoría ${data.category}*\n\n` +
+          `¡Clasificaste al Master de fin de semestre!\n\n` +
+          `📋 *${groupName}*\n` +
+          `Tus rivales: ${groupPlayers.filter(p => p.id !== player.id).map(p => p.name).join(', ')}\n\n` +
+          `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : 'Por definir'} — ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : 'Por definir'}\n` +
+          `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Por definir'}\n\n` +
+          `Coordina tus partidos con tus rivales y regístralos en la app.`
+        );
+        await this.sleep(500);
+      }
+    }
+
+    // Notificar al grupo con los cuadros
+    const grupoANames = grupoA.map(p => p.name).join('\n  • ');
+    const grupoBNames = grupoB.map(p => p.name).join('\n  • ');
+    await this.sendWspGroup(
+      `🏆 *Master CTG — Categoría ${data.category} generado*\n\n` +
+      `*Grupo A:*\n  • ${grupoANames}\n\n` +
+      `*Grupo B:*\n  • ${grupoBNames}\n\n` +
+      `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : '?'} al ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : '?'}\n` +
+      `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '?'}`
+    );
+
+    return this.findByCategory(data.category);
+  }
+
+  /**
+   * Fijar fecha de un partido del Master
+   */
+  async scheduleMatch(matchId: string, userId: string, scheduledDate: Date) {
+    // Buscar player por user_id
+    const player = await this.prisma.player.findUnique({ where: { user_id: userId } });
+    if (!player) throw new BadRequestException('Jugador no encontrado');
+
+    const match = await this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true }
+    });
+
+    if (!match) throw new NotFoundException('Partido no encontrado');
+    if (match.status === 'completed') throw new BadRequestException('Este partido ya está completado');
+    if (match.player1_id !== player.id && match.player2_id !== player.id) {
+      throw new BadRequestException('Solo los jugadores del partido pueden fijar la fecha');
+    }
+    if (scheduledDate <= new Date()) throw new BadRequestException('La fecha debe ser en el futuro');
+
+    await this.prisma.masterMatch.update({
+      where: { id: matchId },
+      data: { scheduled_date: scheduledDate } as any
+    });
+
+    const setter = match.player1_id === player.id ? match.player1 : match.player2;
+    const other = match.player1_id === player.id ? match.player2 : match.player1;
+
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const weekday = scheduledDate.toLocaleDateString('es-CL', { weekday: 'long', timeZone: 'America/Santiago' });
+    const day = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
+    const hour = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+    const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
+
+    await this.sendWsp(
+      other.phone,
+      `🏆 *Master CTG*\n\n` +
+      `📅 *${setter.name}* fijó la fecha del partido:\n\n` +
+      `*${formattedDate}*\n\n` +
+      `Si no puedes, coordina con tu rival.`
+    );
+
+    return this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true, winner: true }
+    });
+  }
+
+  /**
+   * Registrar resultado de un partido del Master
+   */
+  async submitResult(matchId: string, winnerId: string, score: string) {
+    const match = await this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true }
+    });
+
+    if (!match) throw new NotFoundException('Partido no encontrado');
+    if (match.status === 'completed') throw new BadRequestException('Este partido ya tiene resultado');
+    if (winnerId !== match.player1_id && winnerId !== match.player2_id) {
+      throw new BadRequestException('El ganador no corresponde a un jugador de este partido');
+    }
+
+    const loserId = winnerId === match.player1_id ? match.player2_id : match.player1_id;
+    const winner = winnerId === match.player1_id ? match.player1 : match.player2;
+    const loser = winnerId === match.player1_id ? match.player2 : match.player1;
+
+    const { setsWinner, setsLoser } = this.parseSets(score, winnerId === match.player1_id);
+
+    await this.prisma.masterMatch.update({
+      where: { id: matchId },
+      data: { winner_id: winnerId, score, status: 'completed', played_at: new Date() }
+    });
+
+    if (match.group_id && match.round === 'group') {
+      await this.prisma.masterGroupPlayer.updateMany({
+        where: { group_id: match.group_id, player_id: winnerId },
+        data: { wins: { increment: 1 }, sets_won: { increment: setsWinner }, sets_lost: { increment: setsLoser } }
+      });
+      await this.prisma.masterGroupPlayer.updateMany({
+        where: { group_id: match.group_id, player_id: loserId },
+        data: { losses: { increment: 1 }, sets_won: { increment: setsLoser }, sets_lost: { increment: setsWinner } }
+      });
+      await this.checkAndGenerateSemifinals(match.season_id);
+    }
+
+    if (match.round === 'semifinal') {
+      await this.checkAndGenerateFinal(match.season_id);
+    }
+
+    // Notificar resultado
+    await this.sendWsp(
+      winner.phone,
+      `🏆 *Master CTG*\n\n🥇 ¡Ganaste el partido!\n${winner.name} vs ${loser.name}\nScore: ${score}`
+    );
+    await this.sleep(500);
+    await this.sendWsp(
+      loser.phone,
+      `🏆 *Master CTG*\n\nResultado registrado\n${winner.name} vs ${loser.name}\nScore: ${score}`
+    );
+
+    return this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true, winner: true }
+    });
+  }
+
+  /**
+   * Verificar si todos los partidos de grupos terminaron y generar semifinales
+   */
+  private async checkAndGenerateSemifinals(seasonId: string) {
+    const season = await this.prisma.masterSeason.findUnique({
+      where: { id: seasonId },
+      include: {
+        groups: {
+          include: {
+            matches: true,
+            players: { orderBy: [{ wins: 'desc' }, { sets_won: 'desc' }] }
+          }
+        }
+      }
+    });
+
+    if (!season || season.status !== 'active') return;
+
+    const allGroupMatches = season.groups.flatMap(g => g.matches.filter(m => m.round === 'group'));
+    if (!allGroupMatches.every(m => m.status === 'completed')) return;
+
+    const existingSemis = await this.prisma.masterMatch.findFirst({
+      where: { season_id: seasonId, round: 'semifinal' }
+    });
+    if (existingSemis) return;
+
+    const [groupA, groupB] = season.groups;
+    const top2A = groupA.players.slice(0, 2);
+    const top2B = groupB.players.slice(0, 2);
+
+    await this.prisma.masterMatch.createMany({
+      data: [
+        { season_id: seasonId, round: 'semifinal', player1_id: top2A[0].player_id, player2_id: top2B[1].player_id, status: 'pending' },
+        { season_id: seasonId, round: 'semifinal', player1_id: top2B[0].player_id, player2_id: top2A[1].player_id, status: 'pending' },
+      ]
+    });
+
+    await this.prisma.masterSeason.update({ where: { id: seasonId }, data: { status: 'semifinals' } });
+
+    // Notificar semifinalistas
+    const semis = await this.prisma.masterMatch.findMany({
+      where: { season_id: seasonId, round: 'semifinal' },
+      include: { player1: true, player2: true }
+    });
+    for (const semi of semis) {
+      await this.sendWsp(semi.player1.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player2.name}*\nCoordiña la fecha del partido.`);
+      await this.sleep(500);
+      await this.sendWsp(semi.player2.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player1.name}*\nCoordiña la fecha del partido.`);
+      await this.sleep(500);
+    }
+
+    await this.sendWspGroup(
+      `🏆 *Master CTG — ¡Semifinales!*\n\n` +
+      semis.map((s, i) => `🏅 Semi ${i + 1}: *${s.player1.name}* vs *${s.player2.name}*`).join('\n')
+    );
+  }
+
+  /**
+   * Verificar si ambas semifinales terminaron y generar final
+   */
+  async checkAndGenerateFinal(seasonId: string) {
+    const semis = await this.prisma.masterMatch.findMany({
+      where: { season_id: seasonId, round: 'semifinal' },
+      include: { player1: true, player2: true, winner: true }
+    });
+
+    if (semis.length < 2 || !semis.every(s => s.status === 'completed')) return;
+
+    const existingFinal = await this.prisma.masterMatch.findFirst({
+      where: { season_id: seasonId, round: 'final' }
+    });
+    if (existingFinal) return;
+
+    const finalist1Id = semis[0].winner_id!;
+    const finalist2Id = semis[1].winner_id!;
+    const finalist1 = semis[0].winner!;
+    const finalist2 = semis[1].winner!;
+
+    const season = await this.prisma.masterSeason.findUnique({ where: { id: seasonId } });
+
+    await this.prisma.masterMatch.create({
+      data: { season_id: seasonId, round: 'final', player1_id: finalist1Id, player2_id: finalist2Id, status: 'pending' }
+    });
+    await this.prisma.masterSeason.update({ where: { id: seasonId }, data: { status: 'final' } });
+
+    const finalDateStr = season?.final_date
+      ? new Date(season.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })
+      : 'Por confirmar';
+
+    await this.sendWsp(finalist1.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist2.name}*\n📅 ${finalDateStr}`);
+    await this.sleep(500);
+    await this.sendWsp(finalist2.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist1.name}*\n📅 ${finalDateStr}`);
+
+    await this.sendWspGroup(
+      `🏆 *Master CTG — ¡GRAN FINAL!*\n\n` +
+      `⚔️ *${finalist1.name}* vs *${finalist2.name}*\n` +
+      `📅 ${finalDateStr}`
+    );
+  }
+
+  /**
+   * Eliminar torneo
+   */
+  async deleteSeason(seasonId: string) {
+    // Eliminar en orden por foreign keys
+    await this.prisma.masterMatch.deleteMany({ where: { season_id: seasonId } });
+
+    const groups = await this.prisma.masterGroup.findMany({ where: { season_id: seasonId } });
+    for (const group of groups) {
+      await this.prisma.masterGroupPlayer.deleteMany({ where: { group_id: group.id } });
+    }
+    await this.prisma.masterGroup.deleteMany({ where: { season_id: seasonId } });
+    await this.prisma.masterSeason.delete({ where: { id: seasonId } });
+
+    return { message: 'Torneo eliminado' };
+  }
+
+  private parseSets(score: string, player1Wins: boolean): { setsWinner: number; setsLoser: number } {
+    if (!score || score === 'W.O.') return { setsWinner: 0, setsLoser: 0 };
+    try {
+      const sets = score.replace(/\(Retiro\)/i, '').trim().split(',').map(s => s.trim());
+      let setsP1 = 0, setsP2 = 0;
+      for (const set of sets) {
+        const clean = set.replace(/[\[\]]/g, '');
+        const [a, b] = clean.split('-').map(Number);
+        if (!isNaN(a) && !isNaN(b)) {
+          if (a > b) setsP1++; else if (b > a) setsP2++;
+        }
+      }
+      return player1Wins
+        ? { setsWinner: setsP1, setsLoser: setsP2 }
+        : { setsWinner: setsP2, setsLoser: setsP1 };
+    } catch {
+      return { setsWinner: 0, setsLoser: 0 };
+    }
+  }
+}

@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { PlayersModule } from './players/players.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { CronModule } from './cron/cron.module';
+import { MasterModule } from './master/master.module';
 import { TestController } from './test/test.controller';
 
 @Module({
@@ -17,6 +18,7 @@ import { TestController } from './test/test.controller';
     PlayersModule,
     ChallengesModule,
     CronModule,
+    MasterModule,
   ],
   controllers: [TestController],
 })
