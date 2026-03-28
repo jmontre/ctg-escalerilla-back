@@ -12,7 +12,6 @@ export class ChallengesService {
     private rules: ChallengeRulesService
   ) { }
 
-  // Delay entre mensajes WhatsApp para evitar errores de Puppeteer
   private sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -142,6 +141,7 @@ export class ChallengesService {
       data: { status: 'rejected', resolved_at: new Date() }
     });
 
+    // Notificar al desafiante personalmente
     try {
       if (challenge.challenger.phone) {
         await whatsappService.sendMessage(
@@ -150,9 +150,31 @@ export class ChallengesService {
           `${challenge.challenged.name} rechazó tu desafío.\n\n` +
           `🏆 ¡Ganas por W.O. y subes en la escalerilla!`
         );
+        await this.sleep(500);
       }
     } catch (error) {
-      console.error('⚠️ Error al enviar notificaciones:', error);
+      console.error('⚠️ Error al enviar notificación personal:', error);
+    }
+
+    // 🚀 NOTIFICAR AL GRUPO — WO por rechazo
+    try {
+      const groupId = process.env.WHATSAPP_GROUP_ID;
+      const winner = await this.prisma.player.findUnique({ where: { id: challenge.challenger_id } });
+      const loser  = await this.prisma.player.findUnique({ where: { id: challenge.challenged_id } });
+
+      if (groupId && winner && loser) {
+        await whatsappService.sendGroupMessage(
+          groupId,
+          `🎾 *Escalerilla CTG — W.O.*\n\n` +
+          `🏆 *${winner.name}* gana por W.O.\n` +
+          `${loser.name} rechazó el desafío.\n\n` +
+          `📈 Nuevas posiciones:\n` +
+          `  • ${winner.name}: #${winner.position}\n` +
+          `  • ${loser.name}: #${loser.position}`
+        );
+      }
+    } catch (error) {
+      console.error('⚠️ Error al notificar WO al grupo:', error);
     }
 
     return { message: 'Desafío rechazado. El desafiante gana por W.O.' };
@@ -185,7 +207,6 @@ export class ChallengesService {
       throw new BadRequestException('El ganador debe ser uno de los jugadores del desafío');
     }
 
-    // Guardar first_result_at solo si es el primer resultado ingresado
     const isFirstResult = !challenge.challenger_result && !challenge.challenged_result;
     const updateData = {
       ...(isChallenger ? { challenger_result: result } : { challenged_result: result }),
@@ -204,7 +225,7 @@ export class ChallengesService {
     if (!updated) throw new BadRequestException('Error al actualizar desafío');
 
     if (!updated.challenger_result || !updated.challenged_result) {
-      const otherPlayer = isChallenger ? updated.challenged : updated.challenger;
+      const otherPlayer   = isChallenger ? updated.challenged : updated.challenger;
       const currentPlayer = isChallenger ? updated.challenger : updated.challenged;
 
       try {
@@ -260,17 +281,16 @@ export class ChallengesService {
       }
     });
 
-    const isChallenger = challenge.challenger_id === playerId;
+    const isChallenger  = challenge.challenger_id === playerId;
     const setter = isChallenger ? updated.challenger : updated.challenged;
-    const other = isChallenger ? updated.challenged : updated.challenger;
+    const other  = isChallenger ? updated.challenged : updated.challenger;
 
     const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     const weekday = scheduledDate.toLocaleDateString('es-CL', { weekday: 'long', timeZone: 'America/Santiago' });
-    const day = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
-    const hour = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+    const day     = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
+    const hour    = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
 
-    // Notificar al otro jugador
     try {
       if (other.phone) {
         await whatsappService.sendMessage(
@@ -286,7 +306,6 @@ export class ChallengesService {
       console.error('⚠️ Error al enviar notificación de fecha:', error);
     }
 
-    // 🚀 NOTIFICAR AL GRUPO
     try {
       const groupId = process.env.WHATSAPP_GROUP_ID;
       if (groupId) {
@@ -321,8 +340,6 @@ export class ChallengesService {
     if (!challenge) throw new BadRequestException('Desafío no encontrado');
 
     console.log('✅ Desafío encontrado:', challenge.id);
-    console.log('📊 Resultado challenger:', challenge.challenger_result);
-    console.log('📊 Resultado challenged:', challenge.challenged_result);
 
     const result1 = challenge.challenger_result as any;
     const result2 = challenge.challenged_result as any;
@@ -331,35 +348,25 @@ export class ChallengesService {
       console.log('✅ Resultados coinciden. Procesando...');
 
       const winnerId = result1.winnerId;
-      const loserId = winnerId === challenge.challenger_id ? challenge.challenged_id : challenge.challenger_id;
-
-      console.log('🏆 Winner ID:', winnerId);
-      console.log('😢 Loser ID:', loserId);
+      const loserId  = winnerId === challenge.challenger_id ? challenge.challenged_id : challenge.challenger_id;
 
       try {
-        console.log('📍 Procesando corrimiento...');
         await this.rules.processWin(challengeId, winnerId, loserId);
-
-        console.log('🛡️  Aplicando inmunidad/vulnerabilidad...');
         await this.rules.applyPostMatchStatus(winnerId, loserId);
-
-        console.log('📈 Actualizando estadísticas...');
         await this.rules.updateStats(winnerId, loserId);
 
-        console.log('✔️  Marcando como completado...');
         await this.prisma.challenge.update({
           where: { id: challengeId },
           data: {
-            status: 'completed',
-            winner_id: winnerId,
-            final_score: result1.score,
+            status:        'completed',
+            winner_id:     winnerId,
+            final_score:   result1.score,
             results_match: true,
-            played_at: new Date(),
-            resolved_at: new Date()
+            played_at:     new Date(),
+            resolved_at:   new Date()
           }
         });
 
-        console.log('👥 Obteniendo jugadores actualizados...');
         const winner = await this.prisma.player.findUnique({
           where: { id: winnerId },
           select: { id: true, name: true, position: true, email: true, phone: true }
@@ -371,7 +378,7 @@ export class ChallengesService {
 
         if (!winner || !loser) throw new BadRequestException('Jugador no encontrado después de actualizar');
 
-        // 🚀 NOTIFICAR A AMBOS JUGADORES — secuencial con delay
+        // Notificar a ambos jugadores
         try {
           if (winner.phone) {
             await whatsappService.sendMessage(
@@ -400,16 +407,29 @@ export class ChallengesService {
           console.error('⚠️ Error al enviar notificaciones de resultado:', error);
         }
 
-        // 🚀 NOTIFICAR AL GRUPO
+        // 🚀 NOTIFICAR AL GRUPO — con nota de retiro si aplica
         try {
-          await whatsappService.sendResultToGroup(
-            challenge.challenger.name,
-            challenge.challenged.name,
-            winnerId === challenge.challenger_id ? challenge.challenger.name : challenge.challenged.name,
-            result1.score,
-            winner.position,
-            loser.position,
-          );
+          const groupId = process.env.WHATSAPP_GROUP_ID;
+          if (groupId) {
+            const isRetirement = result1.score?.includes('Retiro') || result1.score === 'W.O.';
+            const loserName = winnerId === challenge.challenger_id
+              ? challenge.challenged.name
+              : challenge.challenger.name;
+
+            let msg =
+              `🎾 *Escalerilla CTG — Resultado*\n\n` +
+              `🏆 *${winner.name}* venció a *${loserName}*\n` +
+              `📊 Score: *${result1.score}*\n\n` +
+              `📈 Nuevas posiciones:\n` +
+              `  • ${winner.name}: #${winner.position}\n` +
+              `  • ${loserName}: #${loser.position}`;
+
+            if (isRetirement) {
+              msg += `\n\n_(Partido finalizado por retiro/lesión)_`;
+            }
+
+            await whatsappService.sendGroupMessage(groupId, msg);
+          }
         } catch (error) {
           console.error('⚠️ Error al enviar resultado al grupo:', error);
         }
@@ -418,9 +438,9 @@ export class ChallengesService {
 
         return {
           message: 'Resultado confirmado. Posiciones actualizadas.',
-          winner: { name: winner.name, new_position: winner.position },
-          loser: { name: loser.name, new_position: loser.position },
-          score: result1.score
+          winner:  { name: winner.name, new_position: winner.position },
+          loser:   { name: loser.name,  new_position: loser.position  },
+          score:   result1.score
         };
       } catch (error) {
         console.error('❌ Error en processDoubleConfirmation:', error);
@@ -454,8 +474,8 @@ export class ChallengesService {
       }
 
       return {
-        message: 'Los resultados no coinciden. Un administrador debe revisar el caso.',
-        status: 'disputed',
+        message:         'Los resultados no coinciden. Un administrador debe revisar el caso.',
+        status:          'disputed',
         challenger_says: result1,
         challenged_says: result2
       };

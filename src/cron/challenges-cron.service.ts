@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
+import { whatsappService } from '../notifications/whatsapp.service';
 
 // Cada 6 horas: 00:00, 06:00, 12:00, 18:00
 const EVERY_6_HOURS = '0 0,6,12,18 * * *';
@@ -18,10 +19,6 @@ export class ChallengesCronService {
     private rules: ChallengeRulesService
   ) { }
 
-  /**
-   * CRON JOB: Se ejecuta cada 6 horas
-   * Verifica y procesa desafíos expirados
-   */
   @Cron(EVERY_6_HOURS)
   async handleExpiredChallenges() {
     this.logger.log('⏰ Iniciando verificación de desafíos expirados...');
@@ -45,10 +42,6 @@ export class ChallengesCronService {
     }
   }
 
-  /**
-   * TIPO 1: Desafíos no aceptados a tiempo (24 hrs)
-   * Resultado: el desafiante gana por W.O.
-   */
   private async handleNotAccepted(now: Date): Promise<number> {
     const expired = await this.prisma.challenge.findMany({
       where: { status: 'pending', accept_deadline: { lt: now } },
@@ -65,16 +58,31 @@ export class ChallengesCronService {
         data: { status: 'expired_not_accepted', resolved_at: now }
       });
 
+      // Notificar al grupo
+      try {
+        const winner = await this.prisma.player.findUnique({ where: { id: challenge.challenger_id } });
+        const loser  = await this.prisma.player.findUnique({ where: { id: challenge.challenged_id } });
+        const groupId = process.env.WHATSAPP_GROUP_ID;
+
+        if (groupId && winner && loser) {
+          await whatsappService.sendGroupMessage(
+            groupId,
+            `🎾 *Escalerilla CTG — W.O. automático*\n\n` +
+            `🏆 *${winner.name}* gana por W.O.\n` +
+            `${loser.name} no respondió el desafío a tiempo.\n\n` +
+            `📈 ${winner.name}: #${winner.position}`
+          );
+        }
+      } catch (err) {
+        this.logger.error('⚠️ Error notificando grupo:', err);
+      }
+
       this.logger.log(`✅ W.O. aplicado: ${challenge.challenger.name} sube`);
     }
 
     return expired.length;
   }
 
-  /**
-   * TIPO 2: Aceptados pero no jugados (5 días)
-   * Resultado: el challenger baja 1 posición
-   */
   private async handleNotPlayed(now: Date): Promise<number> {
     const expired = await this.prisma.challenge.findMany({
       where: { status: 'accepted', play_deadline: { lt: now } },
@@ -91,19 +99,28 @@ export class ChallengesCronService {
         data: { status: 'expired_not_played', resolved_at: now }
       });
 
+      // Notificar al grupo
+      try {
+        const groupId = process.env.WHATSAPP_GROUP_ID;
+        if (groupId) {
+          await whatsappService.sendGroupMessage(
+            groupId,
+            `🎾 *Escalerilla CTG — Partido no jugado*\n\n` +
+            `⏰ ${challenge.challenger.name} vs ${challenge.challenged.name}\n` +
+            `El partido venció sin jugarse. Se aplicó penalización.`
+          );
+        }
+      } catch (err) {
+        this.logger.error('⚠️ Error notificando grupo:', err);
+      }
+
       this.logger.log(`✅ Penalización aplicada`);
     }
 
     return expired.length;
   }
 
-  /**
-   * TIPO 3: Un jugador ingresó resultado pero el otro no confirmó
-   * Espera HOURS_TO_CONFIRM_RESULT horas desde el primer resultado
-   * antes de auto-validar
-   */
   private async handleNotConfirmed(now: Date): Promise<number> {
-    // Buscar desafíos aceptados con exactamente un resultado ingresado
     const allAccepted = await this.prisma.challenge.findMany({
       where: { status: 'accepted' },
       include: { challenger: true, challenged: true }
@@ -118,9 +135,7 @@ export class ChallengesCronService {
     let processed = 0;
 
     for (const challenge of pending) {
-      // Usar first_result_at si existe, si no usar accepted_at como fallback
       const referenceTime = (challenge as any).first_result_at ?? challenge.accepted_at;
-
       if (!referenceTime) continue;
 
       const hoursSinceFirstResult = (now.getTime() - new Date(referenceTime).getTime()) / (1000 * 60 * 60);
@@ -128,8 +143,7 @@ export class ChallengesCronService {
       if (hoursSinceFirstResult < HOURS_TO_CONFIRM_RESULT) {
         this.logger.log(
           `⏳ ${challenge.challenger.name} vs ${challenge.challenged.name}: ` +
-          `${hoursSinceFirstResult.toFixed(1)}h desde primer resultado ` +
-          `(mínimo ${HOURS_TO_CONFIRM_RESULT}h)`
+          `${hoursSinceFirstResult.toFixed(1)}h desde primer resultado (mínimo ${HOURS_TO_CONFIRM_RESULT}h)`
         );
         continue;
       }
@@ -158,6 +172,39 @@ export class ChallengesCronService {
         }
       });
 
+      // Notificar al grupo
+      try {
+        const winner = await this.prisma.player.findUnique({ where: { id: winnerId } });
+        const loser  = await this.prisma.player.findUnique({ where: { id: loserId }  });
+        const groupId = process.env.WHATSAPP_GROUP_ID;
+
+        if (groupId && winner && loser) {
+          await whatsappService.sendGroupMessage(
+            groupId,
+            `🎾 *Escalerilla CTG — Resultado auto-validado*\n\n` +
+            `🏆 *${winner.name}* venció a *${loser.name}*\n` +
+            `📊 Score: *${confirmedResult.score}*\n\n` +
+            `📈 Nuevas posiciones:\n` +
+            `  • ${winner.name}: #${winner.position}\n` +
+            `  • ${loser.name}: #${loser.position}\n\n` +
+            `_(Solo un jugador confirmó el resultado)_`
+          );
+        }
+
+        // Notificar al jugador que no confirmó
+        const nonConfirmer = challenge.challenger_result ? challenge.challenged : challenge.challenger;
+        if (nonConfirmer.phone) {
+          await whatsappService.sendMessage(
+            nonConfirmer.phone,
+            `🎾 *Club de Tenis Graneros*\n\n` +
+            `⏰ El resultado del partido vs ${challenge.challenger_result ? challenge.challenger.name : challenge.challenged.name} fue auto-validado porque no ingresaste tu resultado a tiempo.\n\n` +
+            `Score registrado: ${confirmedResult.score}`
+          );
+        }
+      } catch (err) {
+        this.logger.error('⚠️ Error notificando resultado auto-validado:', err);
+      }
+
       this.logger.log(`✅ Resultado auto-validado (${HOURS_TO_CONFIRM_RESULT}h sin confirmación)`);
       processed++;
     }
@@ -165,18 +212,12 @@ export class ChallengesCronService {
     return processed;
   }
 
-  /**
-   * Penalizar solo al challenger (quien desafió y no jugó)
-   */
   private async penalizeBothPlayers(challenge: any) {
     const challenger = await this.prisma.player.findUnique({
       where: { id: challenge.challenger_id }
     });
 
-    if (!challenger) {
-      console.log('⚠️  Challenger no existe');
-      return;
-    }
+    if (!challenger) { console.log('⚠️  Challenger no existe'); return; }
 
     console.log(`⚠️  Penalizando solo al challenger: ${challenger.name} (pos ${challenger.position})`);
 
@@ -185,48 +226,26 @@ export class ChallengesCronService {
     });
 
     await this.prisma.rankingHistory.create({
-      data: {
-        player_id:    challenger.id,
-        old_position: challenger.position,
-        position:     challenger.position + 1,
-        reason:       'penalty',
-      }
+      data: { player_id: challenger.id, old_position: challenger.position, position: challenger.position + 1, reason: 'penalty' }
     });
 
     if (playerBelow) {
       await this.prisma.rankingHistory.create({
-        data: {
-          player_id:    playerBelow.id,
-          old_position: playerBelow.position,
-          position:     playerBelow.position - 1,
-          reason:       'opponent_penalty',
-        }
+        data: { player_id: playerBelow.id, old_position: playerBelow.position, position: playerBelow.position - 1, reason: 'opponent_penalty' }
       });
     }
 
-    await this.prisma.player.update({
-      where: { id: challenger.id },
-      data: { position: 9999 }
-    });
+    await this.prisma.player.update({ where: { id: challenger.id }, data: { position: 9999 } });
 
     if (playerBelow) {
-      await this.prisma.player.update({
-        where: { id: playerBelow.id },
-        data: { position: challenger.position }
-      });
+      await this.prisma.player.update({ where: { id: playerBelow.id }, data: { position: challenger.position } });
     }
 
-    await this.prisma.player.update({
-      where: { id: challenger.id },
-      data: { position: challenger.position + 1 }
-    });
+    await this.prisma.player.update({ where: { id: challenger.id }, data: { position: challenger.position + 1 } });
 
     console.log(`✅ Penalización aplicada: ${challenger.name} baja 1 posición`);
   }
 
-  /**
-   * Ejecutar manualmente (para testing)
-   */
   async runManually() {
     this.logger.log('🔧 Ejecución manual del cron job');
     await this.handleExpiredChallenges();
