@@ -11,19 +11,18 @@ const CATEGORY_RANGES: Record<string, [number, number]> = {
 
 @Injectable()
 export class MasterService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   private sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Envío seguro — si WhatsApp falla, loguea y continúa
   private async sendWsp(phone: string | null | undefined, message: string) {
     if (!phone) return;
     try {
       await whatsappService.sendMessage(phone, message);
       console.log(`📱 WhatsApp enviado a ${phone}`);
-    } catch (err) {
+    } catch {
       console.log(`📱 [LOG WSP → ${phone}]\n${message}`);
     }
   }
@@ -33,24 +32,18 @@ export class MasterService {
     if (!groupId) { console.log(`📱 [LOG GRUPO]\n${message}`); return; }
     try {
       await whatsappService.sendGroupMessage(groupId, message);
-      console.log('📱 Mensaje enviado al grupo');
-    } catch (err) {
+    } catch {
       console.log(`📱 [LOG GRUPO]\n${message}`);
     }
   }
 
-  /**
-   * Obtener todos los torneos master
-   */
   async findAll() {
     return this.prisma.masterSeason.findMany({
       include: {
         groups: {
           include: {
             players: { include: { player: true } },
-            matches: {
-              include: { player1: true, player2: true, winner: true }
-            }
+            matches: { include: { player1: true, player2: true, winner: true } }
           }
         }
       },
@@ -58,9 +51,6 @@ export class MasterService {
     });
   }
 
-  /**
-   * Obtener torneo por categoría
-   */
   async findByCategory(category: string) {
     return this.prisma.masterSeason.findFirst({
       where: { category },
@@ -82,10 +72,6 @@ export class MasterService {
     });
   }
 
-  /**
-   * Generar torneo Master para una categoría (serpenteo)
-   * Envía notificaciones WhatsApp a todos los participantes
-   */
   async generateMaster(data: {
     category: string;
     name: string;
@@ -99,9 +85,7 @@ export class MasterService {
     const existing = await this.prisma.masterSeason.findFirst({
       where: { category: data.category, status: { not: 'completed' } }
     });
-    if (existing) {
-      throw new BadRequestException(`Ya existe un torneo activo para la Categoría ${data.category}.`);
-    }
+    if (existing) throw new BadRequestException(`Ya existe un torneo activo para la Categoría ${data.category}.`);
 
     const players = await this.prisma.player.findMany({
       where: { position: { gte: range[0], lte: range[1] } },
@@ -110,27 +94,24 @@ export class MasterService {
     });
 
     if (players.length < 8) {
-      throw new BadRequestException(
-        `La Categoría ${data.category} tiene solo ${players.length} jugadores. Se necesitan 8.`
-      );
+      throw new BadRequestException(`La Categoría ${data.category} tiene solo ${players.length} jugadores. Se necesitan 8.`);
     }
 
-    // Serpenteo: 1,4,5,8 → Grupo A | 2,3,6,7 → Grupo B
     const grupoA = [players[0], players[3], players[4], players[7]];
     const grupoB = [players[1], players[2], players[5], players[6]];
 
     const season = await this.prisma.masterSeason.create({
       data: {
-        name: data.name,
-        category: data.category,
-        status: 'active',
+        name:              data.name,
+        category:          data.category,
+        status:            'active',
         round_robin_start: data.round_robin_start ? new Date(data.round_robin_start) : null,
-        round_robin_end: data.round_robin_end ? new Date(data.round_robin_end) : null,
-        final_date: data.final_date ? new Date(data.final_date) : null,
+        round_robin_end:   data.round_robin_end   ? new Date(data.round_robin_end)   : null,
+        final_date:        data.final_date        ? new Date(data.final_date)        : null,
       }
     });
 
-    const groups: Array<{ name: string; players: typeof players }> = [
+    const groups = [
       { name: 'Grupo A', players: grupoA },
       { name: 'Grupo B', players: grupoB },
     ];
@@ -139,33 +120,29 @@ export class MasterService {
       const group = await this.prisma.masterGroup.create({
         data: { season_id: season.id, name: groupName }
       });
-
       for (const player of groupPlayers) {
         await this.prisma.masterGroupPlayer.create({
           data: { group_id: group.id, player_id: player.id }
         });
       }
-
       for (let i = 0; i < groupPlayers.length; i++) {
         for (let j = i + 1; j < groupPlayers.length; j++) {
           await this.prisma.masterMatch.create({
             data: {
-              group_id: group.id,
-              season_id: season.id,
-              round: 'group',
+              group_id:   group.id,
+              season_id:  season.id,
+              round:      'group',
               player1_id: groupPlayers[i].id,
               player2_id: groupPlayers[j].id,
-              status: 'pending',
+              status:     'pending',
             }
           });
         }
       }
     }
 
-    // 🚀 NOTIFICACIONES WhatsApp
-    // Notificar a cada jugador con su grupo y rivales
+    // Notificar jugadores
     for (const { name: groupName, players: groupPlayers } of groups) {
-      const rivalNames = groupPlayers.map(p => p.name).join(', ');
       for (const player of groupPlayers) {
         await this.sendWsp(
           player.phone,
@@ -173,15 +150,14 @@ export class MasterService {
           `¡Clasificaste al Master de fin de semestre!\n\n` +
           `📋 *${groupName}*\n` +
           `Tus rivales: ${groupPlayers.filter(p => p.id !== player.id).map(p => p.name).join(', ')}\n\n` +
-          `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : 'Por definir'} — ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : 'Por definir'}\n` +
-          `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Por definir'}\n\n` +
-          `Coordina tus partidos con tus rivales y regístralos en la app.`
+          `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : '?'} — ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : '?'}\n` +
+          `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '?'}\n\n` +
+          `Coordina tus partidos con tus rivales e ingresa el resultado en la app.`
         );
         await this.sleep(500);
       }
     }
 
-    // Notificar al grupo con los cuadros
     const grupoANames = grupoA.map(p => p.name).join('\n  • ');
     const grupoBNames = grupoB.map(p => p.name).join('\n  • ');
     await this.sendWspGroup(
@@ -195,11 +171,7 @@ export class MasterService {
     return this.findByCategory(data.category);
   }
 
-  /**
-   * Fijar fecha de un partido del Master
-   */
   async scheduleMatch(matchId: string, userId: string, scheduledDate: Date) {
-    // Buscar player por user_id
     const player = await this.prisma.player.findUnique({ where: { user_id: userId } });
     if (!player) throw new BadRequestException('Jugador no encontrado');
 
@@ -221,20 +193,17 @@ export class MasterService {
     });
 
     const setter = match.player1_id === player.id ? match.player1 : match.player2;
-    const other = match.player1_id === player.id ? match.player2 : match.player1;
+    const other  = match.player1_id === player.id ? match.player2 : match.player1;
 
-    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const cap     = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     const weekday = scheduledDate.toLocaleDateString('es-CL', { weekday: 'long', timeZone: 'America/Santiago' });
-    const day = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
-    const hour = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+    const day     = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
+    const hour    = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
 
     await this.sendWsp(
       other.phone,
-      `🏆 *Master CTG*\n\n` +
-      `📅 *${setter.name}* fijó la fecha del partido:\n\n` +
-      `*${formattedDate}*\n\n` +
-      `Si no puedes, coordina con tu rival.`
+      `🏆 *Master CTG*\n\n📅 *${setter.name}* fijó la fecha del partido:\n\n*${formattedDate}*\n\nSi no puedes, coordina con tu rival.`
     );
 
     return this.prisma.masterMatch.findUnique({
@@ -244,9 +213,12 @@ export class MasterService {
   }
 
   /**
-   * Registrar resultado de un partido del Master
+   * Ingresar resultado — doble confirmación igual que desafíos
    */
-  async submitResult(matchId: string, winnerId: string, score: string) {
+  async submitPlayerResult(matchId: string, userId: string, result: { winnerId: string; score: string }) {
+    const player = await this.prisma.player.findUnique({ where: { user_id: userId } });
+    if (!player) throw new BadRequestException('Jugador no encontrado');
+
     const match = await this.prisma.masterMatch.findUnique({
       where: { id: matchId },
       include: { player1: true, player2: true }
@@ -254,13 +226,87 @@ export class MasterService {
 
     if (!match) throw new NotFoundException('Partido no encontrado');
     if (match.status === 'completed') throw new BadRequestException('Este partido ya tiene resultado');
-    if (winnerId !== match.player1_id && winnerId !== match.player2_id) {
-      throw new BadRequestException('El ganador no corresponde a un jugador de este partido');
+    if (match.player1_id !== player.id && match.player2_id !== player.id) {
+      throw new BadRequestException('Solo los jugadores del partido pueden ingresar resultado');
+    }
+    if (result.winnerId !== match.player1_id && result.winnerId !== match.player2_id) {
+      throw new BadRequestException('El ganador debe ser uno de los jugadores del partido');
     }
 
+    const isPlayer1 = player.id === match.player1_id;
+
+    // Guardar resultado del jugador actual
+    const updateData = isPlayer1
+      ? { player1_result: result }
+      : { player2_result: result };
+
+    await this.prisma.masterMatch.update({
+      where: { id: matchId },
+      data: updateData as any
+    });
+
+    // Obtener estado actualizado
+    const updated = await this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true }
+    }) as any;
+
+    const hasP1 = updated.player1_result !== null;
+    const hasP2 = updated.player2_result !== null;
+
+    // Solo uno ingresó — notificar al otro
+    if (!hasP1 || !hasP2) {
+      const other       = isPlayer1 ? match.player2 : match.player1;
+      const currentName = isPlayer1 ? match.player1.name : match.player2.name;
+      await this.sendWsp(
+        other.phone,
+        `🏆 *Master CTG*\n\n${currentName} ya ingresó el resultado del partido.\n\n¡No olvides ingresar tu resultado también!`
+      );
+      return { message: 'Resultado registrado. Esperando confirmación del otro jugador.' };
+    }
+
+    // Ambos ingresaron — comparar
+    const r1 = updated.player1_result as { winnerId: string; score: string };
+    const r2 = updated.player2_result as { winnerId: string; score: string };
+
+    if (r1.winnerId === r2.winnerId) {
+      // Resultados coinciden → procesar
+      return this.processMasterResult(matchId, r1.winnerId, r1.score);
+    } else {
+      // Disputa
+      await this.prisma.masterMatch.update({
+        where: { id: matchId },
+        data: { status: 'disputed' } as any
+      });
+
+      const message =
+        `🏆 *Master CTG*\n\n⚠️ Los resultados ingresados no coinciden.\n\nUn administrador revisará el caso.\n\n` +
+        `${match.player1.name} dice: ${r1.score}\n${match.player2.name} dice: ${r2.score}`;
+
+      await this.sendWsp(match.player1.phone, message);
+      await this.sleep(600);
+      await this.sendWsp(match.player2.phone, message);
+
+      return {
+        message: 'Los resultados no coinciden. Un administrador debe revisar el caso.',
+        status: 'disputed',
+      };
+    }
+  }
+
+  /**
+   * Procesar resultado confirmado (doble confirmación o admin)
+   */
+  private async processMasterResult(matchId: string, winnerId: string, score: string) {
+    const match = await this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true }
+    });
+    if (!match) throw new NotFoundException('Partido no encontrado');
+
     const loserId = winnerId === match.player1_id ? match.player2_id : match.player1_id;
-    const winner = winnerId === match.player1_id ? match.player1 : match.player2;
-    const loser = winnerId === match.player1_id ? match.player2 : match.player1;
+    const winner  = winnerId === match.player1_id ? match.player1   : match.player2;
+    const loser   = winnerId === match.player1_id ? match.player2   : match.player1;
 
     const { setsWinner, setsLoser } = this.parseSets(score, winnerId === match.player1_id);
 
@@ -285,26 +331,54 @@ export class MasterService {
       await this.checkAndGenerateFinal(match.season_id);
     }
 
-    // Notificar resultado
+    // Notificar jugadores
+    const isRetirement = score?.includes('Retiro') || score === 'W.O.';
+
     await this.sendWsp(
       winner.phone,
-      `🏆 *Master CTG*\n\n🥇 ¡Ganaste el partido!\n${winner.name} vs ${loser.name}\nScore: ${score}`
+      `🏆 *Master CTG*\n\n🥇 ¡Ganaste el partido!\n` +
+      `${winner.name} vs ${loser.name}\nScore: ${score}` +
+      (isRetirement ? '\n_(Retiro/Lesión)_' : '')
     );
-    await this.sleep(500);
+    await this.sleep(600);
     await this.sendWsp(
       loser.phone,
-      `🏆 *Master CTG*\n\nResultado registrado\n${winner.name} vs ${loser.name}\nScore: ${score}`
+      `🏆 *Master CTG*\n\nResultado confirmado\n` +
+      `${winner.name} vs ${loser.name}\nScore: ${score}` +
+      (isRetirement ? '\n_(Retiro/Lesión)_' : '')
     );
 
-    return this.prisma.masterMatch.findUnique({
-      where: { id: matchId },
-      include: { player1: true, player2: true, winner: true }
-    });
+    // Notificar al grupo
+    await this.sendWspGroup(
+      `🏆 *Master CTG — Resultado Categoría ${(await this.prisma.masterSeason.findUnique({ where: { id: match.season_id } }))?.category}*\n\n` +
+      `🥇 *${winner.name}* venció a *${loser.name}*\n` +
+      `📊 Score: *${score}*` +
+      (isRetirement ? '\n_(Partido finalizado por retiro/lesión)_' : '')
+    );
+
+    return {
+      message: 'Resultado confirmado.',
+      winner: winner.name,
+      score,
+    };
   }
 
   /**
-   * Verificar si todos los partidos de grupos terminaron y generar semifinales
+   * Ingresar resultado directo (admin)
    */
+  async submitResult(matchId: string, winnerId: string, score: string) {
+    const match = await this.prisma.masterMatch.findUnique({
+      where: { id: matchId },
+      include: { player1: true, player2: true }
+    });
+    if (!match) throw new NotFoundException('Partido no encontrado');
+    if (match.status === 'completed') throw new BadRequestException('Este partido ya tiene resultado');
+    if (winnerId !== match.player1_id && winnerId !== match.player2_id) {
+      throw new BadRequestException('El ganador no corresponde a un jugador de este partido');
+    }
+    return this.processMasterResult(matchId, winnerId, score);
+  }
+
   private async checkAndGenerateSemifinals(seasonId: string) {
     const season = await this.prisma.masterSeason.findUnique({
       where: { id: seasonId },
@@ -341,27 +415,23 @@ export class MasterService {
 
     await this.prisma.masterSeason.update({ where: { id: seasonId }, data: { status: 'semifinals' } });
 
-    // Notificar semifinalistas
     const semis = await this.prisma.masterMatch.findMany({
       where: { season_id: seasonId, round: 'semifinal' },
       include: { player1: true, player2: true }
     });
     for (const semi of semis) {
-      await this.sendWsp(semi.player1.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player2.name}*\nCoordiña la fecha del partido.`);
+      await this.sendWsp(semi.player1.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player2.name}*\nCoordiña la fecha e ingresa el resultado en la app.`);
       await this.sleep(500);
-      await this.sendWsp(semi.player2.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player1.name}*\nCoordiña la fecha del partido.`);
+      await this.sendWsp(semi.player2.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player1.name}*\nCoordiña la fecha e ingresa el resultado en la app.`);
       await this.sleep(500);
     }
 
     await this.sendWspGroup(
       `🏆 *Master CTG — ¡Semifinales!*\n\n` +
-      semis.map((s, i) => `🏅 Semi ${i + 1}: *${s.player1.name}* vs *${s.player2.name}*`).join('\n')
+      semis.map((s, i) => `🏅 Semi ${i+1}: *${s.player1.name}* vs *${s.player2.name}*`).join('\n')
     );
   }
 
-  /**
-   * Verificar si ambas semifinales terminaron y generar final
-   */
   async checkAndGenerateFinal(seasonId: string) {
     const semis = await this.prisma.masterMatch.findMany({
       where: { season_id: seasonId, round: 'semifinal' },
@@ -377,10 +447,9 @@ export class MasterService {
 
     const finalist1Id = semis[0].winner_id!;
     const finalist2Id = semis[1].winner_id!;
-    const finalist1 = semis[0].winner!;
-    const finalist2 = semis[1].winner!;
-
-    const season = await this.prisma.masterSeason.findUnique({ where: { id: seasonId } });
+    const finalist1   = semis[0].winner!;
+    const finalist2   = semis[1].winner!;
+    const season      = await this.prisma.masterSeason.findUnique({ where: { id: seasonId } });
 
     await this.prisma.masterMatch.create({
       data: { season_id: seasonId, round: 'final', player1_id: finalist1Id, player2_id: finalist2Id, status: 'pending' }
@@ -396,26 +465,18 @@ export class MasterService {
     await this.sendWsp(finalist2.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist1.name}*\n📅 ${finalDateStr}`);
 
     await this.sendWspGroup(
-      `🏆 *Master CTG — ¡GRAN FINAL!*\n\n` +
-      `⚔️ *${finalist1.name}* vs *${finalist2.name}*\n` +
-      `📅 ${finalDateStr}`
+      `🏆 *Master CTG — ¡GRAN FINAL!*\n\n⚔️ *${finalist1.name}* vs *${finalist2.name}*\n📅 ${finalDateStr}`
     );
   }
 
-  /**
-   * Eliminar torneo
-   */
   async deleteSeason(seasonId: string) {
-    // Eliminar en orden por foreign keys
     await this.prisma.masterMatch.deleteMany({ where: { season_id: seasonId } });
-
     const groups = await this.prisma.masterGroup.findMany({ where: { season_id: seasonId } });
     for (const group of groups) {
       await this.prisma.masterGroupPlayer.deleteMany({ where: { group_id: group.id } });
     }
     await this.prisma.masterGroup.deleteMany({ where: { season_id: seasonId } });
     await this.prisma.masterSeason.delete({ where: { id: seasonId } });
-
     return { message: 'Torneo eliminado' };
   }
 

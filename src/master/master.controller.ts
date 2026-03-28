@@ -9,11 +9,10 @@ export class MasterController {
     private jwtService: JwtService,
   ) {}
 
-  private getPlayerId(auth: string): string {
+  private getUserId(auth: string): string {
     if (!auth?.startsWith('Bearer ')) throw new UnauthorizedException('Token no proporcionado');
     try {
-      const token = auth.split(' ')[1];
-      const payload = this.jwtService.verify(token);
+      const payload = this.jwtService.verify(auth.split(' ')[1]);
       return payload.sub;
     } catch {
       throw new UnauthorizedException('Token inválido');
@@ -21,9 +20,7 @@ export class MasterController {
   }
 
   @Get()
-  findAll() {
-    return this.masterService.findAll();
-  }
+  findAll() { return this.masterService.findAll(); }
 
   @Get(':category')
   findByCategory(@Param('category') category: string) {
@@ -32,21 +29,15 @@ export class MasterController {
 
   @Post('generate')
   generate(@Body() body: {
-    category: string;
-    name: string;
-    round_robin_start?: string;
-    round_robin_end?: string;
-    final_date?: string;
+    category: string; name: string;
+    round_robin_start?: string; round_robin_end?: string; final_date?: string;
   }) {
-    return this.masterService.generateMaster({
-      ...body,
-      category: body.category.toUpperCase()
-    });
+    return this.masterService.generateMaster({ ...body, category: body.category.toUpperCase() });
   }
 
   /**
    * PATCH /master/matches/:id/schedule
-   * Fijar fecha de un partido (jugador autenticado)
+   * Fijar fecha (jugador autenticado)
    */
   @Patch('matches/:id/schedule')
   scheduleMatch(
@@ -54,13 +45,27 @@ export class MasterController {
     @Headers('authorization') auth: string,
     @Body() body: { scheduled_date: string }
   ) {
-    const playerId = this.getPlayerId(auth);
-    return this.masterService.scheduleMatch(id, playerId, new Date(body.scheduled_date));
+    const userId = this.getUserId(auth);
+    return this.masterService.scheduleMatch(id, userId, new Date(body.scheduled_date));
+  }
+
+  /**
+   * POST /master/matches/:id/player-result
+   * Ingresar resultado (jugador autenticado) — doble confirmación
+   */
+  @Post('matches/:id/player-result')
+  submitPlayerResult(
+    @Param('id') id: string,
+    @Headers('authorization') auth: string,
+    @Body() body: { winner_id: string; score: string }
+  ) {
+    const userId = this.getUserId(auth);
+    return this.masterService.submitPlayerResult(id, userId, { winnerId: body.winner_id, score: body.score });
   }
 
   /**
    * POST /master/matches/:id/result
-   * Registrar resultado (admin)
+   * Ingresar resultado directo (admin)
    */
   @Post('matches/:id/result')
   submitResult(
