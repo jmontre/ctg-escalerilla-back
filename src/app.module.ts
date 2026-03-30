@@ -7,6 +7,7 @@ import { PlayersModule } from './players/players.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { CronModule } from './cron/cron.module';
 import { MasterModule } from './master/master.module';
+import { ReservationsModule } from './reservations/reservations.module';
 import { TestController } from './test/test.controller';
 
 @Module({
@@ -19,6 +20,7 @@ import { TestController } from './test/test.controller';
     ChallengesModule,
     CronModule,
     MasterModule,
+    ReservationsModule,
   ],
   controllers: [TestController],
 })

@@ -13,53 +13,53 @@ export class AdminPlayersService {
     name: string;
     phone?: string;
     position?: number;
+    member_type?: string;
+    parent_id?: string;
+    has_debt?: boolean;
+    admin_role?: string | null;
   }) {
     const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { username: data.username },
-          { email: data.email },
-        ],
-      },
+      where: { OR: [{ username: data.username }, { email: data.email }] },
     });
 
-    if (existing) {
-      throw new ConflictException('Username o email ya existe');
-    }
+    if (existing) throw new ConflictException('Username o email ya existe');
 
     const password_hash = await bcrypt.hash(data.password, 10);
 
-    let position = data.position;
-    if (!position) {
-      const lastPlayer = await this.prisma.player.findFirst({
-        orderBy: { position: 'desc' },
-      });
-      position = (lastPlayer?.position || 0) + 1;
+    // Si no tiene posición, es socio sin escalerilla (position = null)
+    let position: number | null | undefined = data.position;
+    if (position === undefined || position === null) {
+      // Solo asignar posición automática si no es hijo y no se especificó
+      position = null;
     }
+
+    const isAdmin = !!data.admin_role;
 
     const user = await this.prisma.user.create({
       data: {
-        username: data.username,
-        email: data.email,
+        username:   data.username,
+        email:      data.email,
         password_hash,
+        is_admin:   isAdmin,
+        admin_role: data.admin_role || null,
       },
     });
 
     const player = await this.prisma.player.create({
       data: {
-        user_id: user.id,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
+        user_id:     user.id,
+        name:        data.name,
+        email:       data.email,
+        phone:       data.phone,
         position,
+        member_type: data.member_type || 'socio',
+        parent_id:   data.parent_id   || null,
+        has_debt:    data.has_debt    || false,
       },
       include: {
-        user: {
-          select: {
-            username: true,
-            is_admin: true,
-          },
-        },
+        user:     { select: { username: true, is_admin: true, admin_role: true } },
+        parent:   { select: { id: true, name: true } },
+        children: { select: { id: true, name: true } },
       },
     });
 
@@ -72,125 +72,106 @@ export class AdminPlayersService {
       name?: string;
       email?: string;
       phone?: string;
-      position?: number;
+      position?: number | null;
       wins?: number;
       losses?: number;
       total_matches?: number;
       immune_until?: string | null;
       vulnerable_until?: string | null;
+      // Reservas
+      member_type?: string;
+      parent_id?: string | null;
+      has_debt?: boolean;
+      // Admin
+      admin_role?: string | null;
+      extra_high_demand_slots?: number;
     }
   ) {
-    const player = await this.prisma.player.findUnique({ where: { id } });
-    if (!player) {
-      throw new NotFoundException('Jugador no encontrado');
-    }
+    const player = await this.prisma.player.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+    if (!player) throw new NotFoundException('Jugador no encontrado');
 
-    const updateData: any = {};
+    const playerUpdate: any = {};
+    const userUpdate: any   = {};
 
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.email !== undefined) updateData.email = data.email;
-    if (data.phone !== undefined) updateData.phone = data.phone;
-    if (data.position !== undefined) updateData.position = data.position;
-    if (data.wins !== undefined) updateData.wins = data.wins;
-    if (data.losses !== undefined) updateData.losses = data.losses;
-    if (data.total_matches !== undefined) updateData.total_matches = data.total_matches;
-    
-    // Manejar fechas
+    if (data.name         !== undefined) playerUpdate.name         = data.name;
+    if (data.email        !== undefined) playerUpdate.email        = data.email;
+    if (data.phone        !== undefined) playerUpdate.phone        = data.phone;
+    if (data.position     !== undefined) playerUpdate.position     = data.position;
+    if (data.wins         !== undefined) playerUpdate.wins         = data.wins;
+    if (data.losses       !== undefined) playerUpdate.losses       = data.losses;
+    if (data.total_matches!== undefined) playerUpdate.total_matches= data.total_matches;
+    if (data.member_type  !== undefined) playerUpdate.member_type  = data.member_type;
+    if (data.parent_id    !== undefined) playerUpdate.parent_id    = data.parent_id || null;
+    if (data.has_debt     !== undefined) playerUpdate.has_debt     = data.has_debt;
+    if (data.extra_high_demand_slots !== undefined) playerUpdate.extra_high_demand_slots = data.extra_high_demand_slots;
     if (data.immune_until !== undefined) {
-      updateData.immune_until = data.immune_until ? new Date(data.immune_until) : null;
+      playerUpdate.immune_until = data.immune_until ? new Date(data.immune_until) : null;
     }
     if (data.vulnerable_until !== undefined) {
-      updateData.vulnerable_until = data.vulnerable_until ? new Date(data.vulnerable_until) : null;
+      playerUpdate.vulnerable_until = data.vulnerable_until ? new Date(data.vulnerable_until) : null;
+    }
+
+    // Actualizar admin_role en User
+    if (data.admin_role !== undefined) {
+      userUpdate.admin_role = data.admin_role || null;
+      userUpdate.is_admin   = !!data.admin_role;
+    }
+
+    if (Object.keys(userUpdate).length > 0) {
+      await this.prisma.user.update({ where: { id: player.user_id }, data: userUpdate });
     }
 
     return this.prisma.player.update({
       where: { id },
-      data: updateData,
+      data: playerUpdate,
       include: {
-        user: {
-          select: {
-            username: true,
-            is_admin: true,
-          },
-        },
+        user:     { select: { username: true, is_admin: true, admin_role: true } },
+        parent:   { select: { id: true, name: true } },
+        children: { select: { id: true, name: true } },
       },
     });
   }
 
   async deletePlayer(id: string) {
-    const player = await this.prisma.player.findUnique({
-      where: { id },
-      include: { user: true },
-    });
-
-    if (!player) {
-      throw new NotFoundException('Jugador no encontrado');
-    }
-
-    await this.prisma.user.delete({
-      where: { id: player.user_id },
-    });
-
+    const player = await this.prisma.player.findUnique({ where: { id }, include: { user: true } });
+    if (!player) throw new NotFoundException('Jugador no encontrado');
+    await this.prisma.user.delete({ where: { id: player.user_id } });
     return { message: 'Jugador eliminado correctamente' };
   }
 
   async movePlayer(id: string, newPosition: number) {
     const player = await this.prisma.player.findUnique({ where: { id } });
-    if (!player) {
-      throw new NotFoundException('Jugador no encontrado');
-    }
+    if (!player) throw new NotFoundException('Jugador no encontrado');
 
     const oldPosition = player.position;
 
-    if (newPosition < oldPosition) {
+    if (newPosition < (oldPosition ?? 0)) {
       await this.prisma.player.updateMany({
-        where: {
-          position: {
-            gte: newPosition,
-            lt: oldPosition,
-          },
-        },
-        data: {
-          position: {
-            increment: 1,
-          },
-        },
+        where: { position: { gte: newPosition, lt: oldPosition ?? 0 } },
+        data:  { position: { increment: 1 } },
       });
-    } else if (newPosition > oldPosition) {
+    } else if (newPosition > (oldPosition ?? 0)) {
       await this.prisma.player.updateMany({
-        where: {
-          position: {
-            gt: oldPosition,
-            lte: newPosition,
-          },
-        },
-        data: {
-          position: {
-            decrement: 1,
-          },
-        },
+        where: { position: { gt: oldPosition ?? 0, lte: newPosition } },
+        data:  { position: { decrement: 1 } },
       });
     }
 
     const updated = await this.prisma.player.update({
       where: { id },
-      data: { position: newPosition },
-      include: {
-        user: {
-          select: {
-            username: true,
-            is_admin: true,
-          },
-        },
-      },
+      data:  { position: newPosition },
+      include: { user: { select: { username: true, is_admin: true, admin_role: true } } },
     });
 
     await this.prisma.rankingHistory.create({
       data: {
-        player_id: id,
-        position: newPosition,
+        player_id:    id,
+        position:     newPosition,
         old_position: oldPosition,
-        reason: 'Movimiento manual por administrador',
+        reason:       'Movimiento manual por administrador',
       },
     });
 
@@ -198,16 +179,54 @@ export class AdminPlayersService {
   }
 
   async resetImmunity(id: string) {
-    return this.prisma.player.update({
-      where: { id },
-      data: { immune_until: null },
-    });
+    return this.prisma.player.update({ where: { id }, data: { immune_until: null } });
   }
 
   async resetVulnerability(id: string) {
-    return this.prisma.player.update({
-      where: { id },
-      data: { vulnerable_until: null },
+    return this.prisma.player.update({ where: { id }, data: { vulnerable_until: null } });
+  }
+
+  /**
+   * Obtener cupos de alta demanda usados esta semana por un jugador
+   */
+  async getWeeklyHighDemandUsage(playerId: string) {
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      include: { children: { select: { id: true, name: true } } }
     });
+    if (!player) throw new NotFoundException('Jugador no encontrado');
+
+    const playerIds = [playerId, ...(player.children?.map((c: any) => c.id) || [])];
+
+    const used = await this.prisma.reservation.count({
+      where: {
+        player_id:      { in: playerIds },
+        is_high_demand: true,
+        status:         'active',
+        date:           { gte: weekStart, lte: weekEnd },
+      }
+    });
+
+    const limit = player.member_type === 'hijo_socio'
+      ? 1
+      : 2 + (player.children?.length || 0);
+
+    return {
+      player_id:   playerId,
+      member_type: player.member_type,
+      used,
+      limit,
+      remaining:   Math.max(0, limit - used),
+      week_start:  weekStart,
+      week_end:    weekEnd,
+    };
   }
 }

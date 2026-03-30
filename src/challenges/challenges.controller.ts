@@ -8,7 +8,7 @@ class CreateChallengeDto {
 
 @Controller('challenges')
 export class ChallengesController {
-  constructor(private readonly challengesService: ChallengesService) {}
+  constructor(private readonly challengesService: ChallengesService) { }
 
   /**
    * POST /challenges
@@ -105,11 +105,16 @@ export class ChallengesController {
   @Post(':id/schedule')
   scheduleMatch(
     @Param('id') id: string,
-    @Body() body: { player_id: string; scheduled_date: string }
+    @Body() body: { player_id: string; scheduled_date: string; court_id?: string }
   ) {
     if (!body.player_id || !body.scheduled_date) {
       throw new BadRequestException('player_id y scheduled_date son requeridos');
     }
-    return this.challengesService.scheduleMatch(id, body.player_id, new Date(body.scheduled_date));
+    return this.challengesService.scheduleMatch(
+      id,
+      body.player_id,
+      new Date(body.scheduled_date),
+      body.court_id,  // ← agrega esto
+    );
   }
 }

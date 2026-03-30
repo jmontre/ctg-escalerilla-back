@@ -1,12 +1,4 @@
-import { 
-  Controller, 
-  Post, 
-  Put, 
-  Delete, 
-  Body, 
-  Param, 
-  UseGuards 
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
 import { AdminPlayersService } from './admin-players.service';
 
 @Controller('admin/players')
@@ -21,6 +13,10 @@ export class AdminPlayersController {
     name: string;
     phone?: string;
     position?: number;
+    member_type?: string;
+    parent_id?: string;
+    has_debt?: boolean;
+    admin_role?: string | null;
   }) {
     return this.adminService.createPlayer(data);
   }
@@ -32,7 +28,16 @@ export class AdminPlayersController {
       name?: string;
       email?: string;
       phone?: string;
-      position?: number;
+      position?: number | null;
+      wins?: number;
+      losses?: number;
+      total_matches?: number;
+      immune_until?: string | null;
+      vulnerable_until?: string | null;
+      member_type?: string;
+      parent_id?: string | null;
+      has_debt?: boolean;
+      admin_role?: string | null;
     }
   ) {
     return this.adminService.updatePlayer(id, data);
@@ -44,10 +49,7 @@ export class AdminPlayersController {
   }
 
   @Post(':id/move')
-  async movePlayer(
-    @Param('id') id: string,
-    @Body() data: { newPosition: number }
-  ) {
+  async movePlayer(@Param('id') id: string, @Body() data: { newPosition: number }) {
     return this.adminService.movePlayer(id, data.newPosition);
   }
 
@@ -59,5 +61,11 @@ export class AdminPlayersController {
   @Post(':id/reset-vulnerability')
   async resetVulnerability(@Param('id') id: string) {
     return this.adminService.resetVulnerability(id);
+  }
+
+  /** GET /admin/players/:id/weekly-usage — cupos alta demanda usados esta semana */
+  @Get(':id/weekly-usage')
+  async getWeeklyUsage(@Param('id') id: string) {
+    return this.adminService.getWeeklyHighDemandUsage(id);
   }
 }

@@ -13,6 +13,7 @@ model User {
   email         String   @unique
   password_hash String
   is_admin      Boolean  @default(false)
+  admin_role    String?  // null | "escalerilla" | "reservas" | "all"
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -29,15 +30,21 @@ model Player {
   email            String    @unique
   phone            String?
   avatar_url       String?
-  position         Int       @unique
+  position         Int?
   wins             Int       @default(0)
   losses           Int       @default(0)
   total_matches    Int       @default(0)
   immune_until     DateTime?
   vulnerable_until DateTime?
+  member_type      String    @default("socio")
+  parent_id        String?
+  has_debt         Boolean   @default(false)
   created_at       DateTime  @default(now())
+  extra_high_demand_slots   Int       @default(0)
 
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user     User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent   Player? @relation("family", fields: [parent_id], references: [id])
+  children Player[] @relation("family")
 
   challenges_made      Challenge[]         @relation("challenger")
   challenges_received  Challenge[]         @relation("challenged")
@@ -46,6 +53,7 @@ model Player {
   master_matches_p1    MasterMatch[]       @relation("master_player1")
   master_matches_p2    MasterMatch[]       @relation("master_player2")
   master_matches_won   MasterMatch[]       @relation("master_winner")
+  reservations         Reservation[]
 
   @@map("players")
 }
@@ -102,14 +110,11 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
-// ─── MASTER TOURNAMENT ────────────────────────────────────────────────────────
-
 model MasterSeason {
   id                String    @id @default(uuid())
-  name              String // "1er Semestre 2026"
-  category          String // "A" | "B" | "C" | "D"
+  name              String
+  category          String
   status            String    @default("pending")
-  // pending → active (round robin) → semifinals → final → completed
   round_robin_start DateTime?
   round_robin_end   DateTime?
   final_date        DateTime?
@@ -123,7 +128,7 @@ model MasterSeason {
 model MasterGroup {
   id         String   @id @default(uuid())
   season_id  String
-  name       String // "Grupo A" | "Grupo B"
+  name       String
   created_at DateTime @default(now())
 
   season  MasterSeason        @relation(fields: [season_id], references: [id], onDelete: Cascade)
@@ -137,7 +142,6 @@ model MasterGroupPlayer {
   id         String   @id @default(uuid())
   group_id   String
   player_id  String
-  // Estadísticas del round robin
   wins       Int      @default(0)
   losses     Int      @default(0)
   sets_won   Int      @default(0)
@@ -161,7 +165,7 @@ model MasterMatch {
   winner_id      String?
   score          String?
   status         String    @default("pending")
-  scheduled_date DateTime? // ← AGREGA ESTA LÍNEA
+  scheduled_date DateTime?
   played_at      DateTime?
   created_at     DateTime  @default(now())
 
@@ -171,4 +175,50 @@ model MasterMatch {
   winner  Player?      @relation("master_winner", fields: [winner_id], references: [id])
 
   @@map("master_matches")
+}
+
+model Court {
+  id         String   @id @default(uuid())
+  name       String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  reservations Reservation[]
+
+  @@map("courts")
+}
+
+model Reservation {
+  id             String    @id @default(uuid())
+  player_id      String
+  court_id       String
+  date           DateTime  @db.Date
+  time_slot      String
+  is_high_demand Boolean   @default(false)
+  has_guest      Boolean   @default(false)
+  guest_name     String?
+  guest_paid     Boolean   @default(false)
+  guest_fee      Int       @default(0)
+  partner_name   String?
+  status         String    @default("active")
+  cancelled_at   DateTime?
+  cancel_reason  String?
+  created_at     DateTime  @default(now())
+  is_challenge   Boolean   @default(false)
+  challenge_id   String?
+  
+
+  player Player @relation(fields: [player_id], references: [id])
+  court  Court  @relation(fields: [court_id], references: [id])
+
+  @@map("reservations")
+}
+
+model SystemConfig {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  value      String
+  updated_at DateTime @default(now())
+
+  @@map("system_config")
 }

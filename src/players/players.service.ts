@@ -16,7 +16,7 @@ export class PlayersService {
       orderBy: { position: 'asc' },
       include: {
         user: {
-          select: { username: true, is_admin: true }
+          select: { username: true, is_admin: true, admin_role: true }
         },
         challenges_made: {
           where: { status: { in: ['pending', 'accepted'] } },
@@ -37,12 +37,15 @@ export class PlayersService {
       }
     });
 
-    return players.map(p => ({
-      ...p,
-      is_admin: p.user?.is_admin || false,
-      challenger_challenge: p.challenges_made[0] || null,
-      challenged_challenge: p.challenges_received[0] || null,
-    }));
+    return players
+      .filter(p => !p.user?.is_admin)  // ← excluir admins
+      .map(p => ({
+        ...p,
+        is_admin: p.user?.is_admin || false,
+        admin_role: p.user?.admin_role || null,
+        challenger_challenge: p.challenges_made[0] || null,
+        challenged_challenge: p.challenges_received[0] || null,
+      }));
   }
 
   async findOne(id: string) {
