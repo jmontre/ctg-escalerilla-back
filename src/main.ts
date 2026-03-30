@@ -15,7 +15,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:3001',
-      'https://escalerilla.clubdetenisgraneros.cl',
+      'https://reservas.clubdetenisgraneros.cl',
       process.env.FRONTEND_URL,
     ].filter(Boolean) as string[],
     credentials: true,
