@@ -17,6 +17,7 @@ export class AdminPlayersService {
     parent_id?: string;
     has_debt?: boolean;
     admin_role?: string | null;
+    school_names?: string[];
   }) {
     const existing = await this.prisma.user.findFirst({
       where: { OR: [{ username: data.username }, { email: data.email }] },
@@ -47,14 +48,15 @@ export class AdminPlayersService {
 
     const player = await this.prisma.player.create({
       data: {
-        user_id:     user.id,
-        name:        data.name,
-        email:       data.email,
-        phone:       data.phone,
+        user_id:      user.id,
+        name:         data.name,
+        email:        data.email,
+        phone:        data.phone,
         position,
-        member_type: data.member_type || 'socio',
-        parent_id:   data.parent_id   || null,
-        has_debt:    data.has_debt    || false,
+        member_type:  data.member_type  || 'socio',
+        parent_id:    data.parent_id    || null,
+        has_debt:     data.has_debt     || false,
+        school_names: data.school_names || [],
       },
       include: {
         user:     { select: { username: true, is_admin: true, admin_role: true } },
@@ -78,13 +80,12 @@ export class AdminPlayersService {
       total_matches?: number;
       immune_until?: string | null;
       vulnerable_until?: string | null;
-      // Reservas
       member_type?: string;
       parent_id?: string | null;
       has_debt?: boolean;
-      // Admin
       admin_role?: string | null;
       extra_high_demand_slots?: number;
+      school_names?: string[];
     }
   ) {
     const player = await this.prisma.player.findUnique({
@@ -107,6 +108,7 @@ export class AdminPlayersService {
     if (data.parent_id    !== undefined) playerUpdate.parent_id    = data.parent_id || null;
     if (data.has_debt     !== undefined) playerUpdate.has_debt     = data.has_debt;
     if (data.extra_high_demand_slots !== undefined) playerUpdate.extra_high_demand_slots = data.extra_high_demand_slots;
+    if (data.school_names            !== undefined) playerUpdate.school_names            = data.school_names;
     if (data.immune_until !== undefined) {
       playerUpdate.immune_until = data.immune_until ? new Date(data.immune_until) : null;
     }

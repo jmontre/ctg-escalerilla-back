@@ -36,13 +36,18 @@ export class ReservationsController {
     return this.reservationsService.setSeason(body.season);
   }
 
+  // Rutas estáticas ANTES de rutas con parámetros (:id)
+  @Get('stats')
+  getStats(@Query('month') month?: string) {
+    return this.reservationsService.getStats(month);
+  }
+
   @Get('my')
   getMyReservations(@Headers('authorization') auth: string) {
     const userId = this.getUserId(auth);
     return this.reservationsService.getMyReservations(userId);
   }
 
-  /** GET /reservations/player/:playerId — reservas de un jugador (admin) */
   @Get('player/:playerId')
   getPlayerReservations(@Param('playerId') playerId: string) {
     return this.reservationsService.getPlayerReservations(playerId);
@@ -56,7 +61,15 @@ export class ReservationsController {
   @Post()
   create(
     @Headers('authorization') auth: string,
-    @Body() body: { court_id: string; date: string; time_slot: string; has_guest?: boolean; guest_name?: string; partner_name?: string }
+    @Body() body: {
+      court_id: string;
+      date: string;
+      time_slot: string;
+      has_guest?: boolean;
+      guest_name?: string;
+      partner_name?: string;
+      school_name?: string;
+    }
   ) {
     const userId = this.getUserId(auth);
     return this.reservationsService.create(userId, body);

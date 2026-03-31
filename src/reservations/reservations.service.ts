@@ -74,11 +74,14 @@ export class ReservationsService {
                         is_high_demand: highDemandSlots.includes(slot),
                         available: !existing,
                         reservation: existing ? {
-                            player_name:  existing.player.name,
+                            player_name:  (existing as any).school_name
+                                ? `Escuela ${(existing as any).school_name}`
+                                : existing.player.name,
                             has_guest:    existing.has_guest,
                             guest_name:   existing.guest_name,
                             partner_name: (existing as any).partner_name || null,
                             is_challenge: (existing as any).is_challenge || false,
+                            school_name:  (existing as any).school_name  || null,
                         } : null,
                     };
                 }),
@@ -124,6 +127,126 @@ export class ReservationsService {
         return { reservations, weekUsage };
     }
 
+    // ── Stats ────────────────────────────────────────────────────────────────────
+
+    async getStats(month?: string) {
+        // Determinar rango del mes (default: mes actual)
+        const now = new Date();
+        const year  = month ? parseInt(month.split('-')[0]) : now.getFullYear();
+        const mon   = month ? parseInt(month.split('-')[1]) - 1 : now.getMonth();
+
+        const monthStart = new Date(year, mon, 1);
+        const monthEnd   = new Date(year, mon + 1, 0, 23, 59, 59, 999);
+
+        // Mes anterior para comparación
+        const prevStart = new Date(year, mon - 1, 1);
+        const prevEnd   = new Date(year, mon, 0, 23, 59, 59, 999);
+
+        const where = { date: { gte: monthStart, lte: monthEnd } };
+        const prevWhere = { date: { gte: prevStart, lte: prevEnd } };
+
+        // ── Totales ──
+        const totalActive    = await this.prisma.reservation.count({ where: { ...where, status: 'active' } });
+        const totalCancelled = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled' } });
+        const totalAll       = totalActive + totalCancelled;
+        const prevTotal      = await this.prisma.reservation.count({ where: { ...prevWhere, status: 'active' } });
+
+        // ── Con visita ──
+        const withGuest = await this.prisma.reservation.findMany({
+            where: { ...where, has_guest: true },
+            include: { player: { select: { id: true, name: true } }, court: true },
+            orderBy: { date: 'desc' },
+        });
+        const guestRevenue = withGuest.reduce((sum, r) => sum + (r.guest_fee || 3000), 0);
+
+        // ── Alta vs baja demanda ──
+        const highDemand = await this.prisma.reservation.count({ where: { ...where, is_high_demand: true, status: 'active' } });
+        const lowDemand  = await this.prisma.reservation.count({ where: { ...where, is_high_demand: false, status: 'active' } });
+
+        // ── Desafíos vs normales ──
+        const challenges = await (this.prisma.reservation as any).count({ where: { ...where, is_challenge: true, status: 'active' } });
+        const normal     = totalActive - challenges;
+
+        // ── Por cancha ──
+        const courts = await this.getCourts();
+        const byCourt = await Promise.all(courts.map(async court => {
+            const count = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: 'active' } });
+            // Total slots disponibles en el mes
+            const daysInMonth = monthEnd.getDate();
+            const totalSlots  = daysInMonth * ALL_SLOTS.length;
+            return { court: court.name, count, occupancy: Math.round((count / totalSlots) * 100) };
+        }));
+
+        // ── Por horario ──
+        const allReservations = await this.prisma.reservation.findMany({
+            where: { ...where, status: 'active' },
+        });
+        const bySlot: Record<string, number> = {};
+        for (const slot of ALL_SLOTS) bySlot[slot] = 0;
+        for (const r of allReservations) bySlot[r.time_slot] = (bySlot[r.time_slot] || 0) + 1;
+        const bySlotArr = Object.entries(bySlot)
+            .map(([slot, count]) => ({ slot, count }))
+            .sort((a, b) => b.count - a.count);
+
+        // ── Top socios ──
+        const playerCount: Record<string, { name: string; count: number }> = {};
+        for (const r of allReservations) {
+            if (!playerCount[r.player_id]) {
+                const p = await this.prisma.player.findUnique({ where: { id: r.player_id }, select: { name: true } });
+                playerCount[r.player_id] = { name: p?.name || 'Desconocido', count: 0 };
+            }
+            playerCount[r.player_id].count++;
+        }
+        const topPlayers = Object.entries(playerCount)
+            .map(([id, data]) => ({ player_id: id, name: data.name, count: data.count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
+        // ── Reservas por día del mes ──
+        const byDay: Record<number, number> = {};
+        for (const r of allReservations) {
+            const day = new Date(r.date).getDate();
+            byDay[day] = (byDay[day] || 0) + 1;
+        }
+        const byDayArr = Array.from({ length: monthEnd.getDate() }, (_, i) => ({
+            day: i + 1,
+            count: byDay[i + 1] || 0,
+        }));
+
+        return {
+            month: `${year}-${String(mon + 1).padStart(2, '0')}`,
+            month_label: new Date(year, mon, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }),
+            totals: {
+                active:    totalActive,
+                cancelled: totalCancelled,
+                all:       totalAll,
+                prev_month: prevTotal,
+                growth: prevTotal > 0 ? Math.round(((totalActive - prevTotal) / prevTotal) * 100) : 0,
+            },
+            guest: {
+                count:   withGuest.length,
+                revenue: guestRevenue,
+                list:    withGuest.map(r => ({
+                    id:          r.id,
+                    player_name: (r.player as any)?.name,
+                    court:       (r.court as any)?.name,
+                    date:        r.date,
+                    time_slot:   r.time_slot,
+                    guest_name:  r.guest_name,
+                    guest_fee:   r.guest_fee,
+                })),
+            },
+            demand: { high: highDemand, low: lowDemand },
+            type:   { challenges, normal },
+            by_court:  byCourt,
+            by_slot:   bySlotArr,
+            top_players: topPlayers,
+            by_day:    byDayArr,
+        };
+    }
+
+    // ── Create ───────────────────────────────────────────────────────────────────
+
     async create(userId: string, data: {
         court_id: string;
         date: string;
@@ -131,10 +254,13 @@ export class ReservationsService {
         has_guest?: boolean;
         guest_name?: string;
         partner_name?: string;
+        school_name?: string;
     }) {
         const player = await this.getPlayerByUserId(userId);
 
         if (player.has_debt) throw new ForbiddenException('No puedes reservar mientras tengas deuda pendiente.');
+
+        const isProfe = (player as any).member_type === 'profe';
 
         const season = await this.getSeason();
         const highDemandSlots = HIGH_DEMAND_SLOTS[season];
@@ -156,12 +282,16 @@ export class ReservationsService {
         });
         if (existing) throw new BadRequestException('Este turno ya está reservado en esa cancha.');
 
-        const activeReservation = await this.prisma.reservation.findFirst({
-            where: { player_id: player.id, status: 'active' }
-        });
-        if (activeReservation) throw new BadRequestException('Ya tienes una reserva activa. Debes cancelarla antes de hacer una nueva.');
+        // Socios normales: solo 1 reserva activa. Profes: sin límite.
+        if (!isProfe) {
+            const activeReservation = await this.prisma.reservation.findFirst({
+                where: { player_id: player.id, status: 'active' }
+            });
+            if (activeReservation) throw new BadRequestException('Ya tienes una reserva activa. Debes cancelarla antes de hacer una nueva.');
+        }
 
-        if (isHighDemand) await this.checkHighDemandLimit(player, reservationDate);
+        // Alta demanda: solo aplica a socios normales. Profes sin límite.
+        if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, reservationDate);
 
         const reservation = await this.prisma.reservation.create({
             data: {
@@ -170,33 +300,36 @@ export class ReservationsService {
                 date:           reservationDate,
                 time_slot:      data.time_slot,
                 is_high_demand: isHighDemand,
-                has_guest:      data.has_guest  || false,
-                guest_name:     data.guest_name || null,
-                guest_fee:      data.has_guest  ? 3000 : 0,
-                partner_name:   data.partner_name || null,
+                has_guest:      isProfe ? false : (data.has_guest || false),
+                guest_name:     isProfe ? null  : (data.guest_name || null),
+                guest_fee:      isProfe ? 0     : (data.has_guest ? 3000 : 0),
+                partner_name:   isProfe ? null  : (data.partner_name || null),
+                school_name:    isProfe ? (data.school_name || null) : null,
                 status:         'active',
             },
             include: { court: true }
         });
 
-        // Notificar al jugador (solo reservas normales, no desafíos)
-        try {
-            if (player.phone) {
-                const fechaFormateada = formatReservationDate(reservationDate);
-                await whatsappService.sendMessage(
-                    player.phone,
-                    `📅 *Club de Tenis Graneros*\n\n` +
-                    `✅ Tu reserva está confirmada\n\n` +
-                    `🎾 ${court.name}\n` +
-                    `📆 ${fechaFormateada}\n` +
-                    `🕐 ${data.time_slot} hrs` +
-                    (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
-                    (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
-                    (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
-                );
+        // Notificación solo para socios normales (no profes)
+        if (!isProfe) {
+            try {
+                if (player.phone) {
+                    const fechaFormateada = formatReservationDate(reservationDate);
+                    await whatsappService.sendMessage(
+                        player.phone,
+                        `📅 *Club de Tenis Graneros*\n\n` +
+                        `✅ Tu reserva está confirmada\n\n` +
+                        `🎾 ${court.name}\n` +
+                        `📆 ${fechaFormateada}\n` +
+                        `🕐 ${data.time_slot} hrs` +
+                        (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
+                        (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
+                        (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
+                    );
+                }
+            } catch (e) {
+                console.log(`📱 [LOG WSP → ${player.phone}] Reserva confirmada ${court.name} ${data.time_slot}`);
             }
-        } catch (e) {
-            console.log(`📱 [LOG WSP → ${player.phone}] Reserva confirmada ${court.name} ${data.time_slot}`);
         }
 
         return { message: 'Reserva creada correctamente.', reservation };
@@ -226,7 +359,6 @@ export class ReservationsService {
             data:  { status: 'cancelled', cancelled_at: new Date() }
         });
 
-        // Si es desafío, limpiar fecha del desafío
         if ((reservation as any).challenge_id) {
             await this.prisma.challenge.update({
                 where: { id: (reservation as any).challenge_id },
@@ -234,7 +366,6 @@ export class ReservationsService {
             });
         }
 
-        // Notificar cancelación (solo reservas normales)
         if (!(reservation as any).is_challenge) {
             try {
                 if (player.phone) {
@@ -268,7 +399,6 @@ export class ReservationsService {
             data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: reason || 'Cancelada por administrador' }
         });
 
-        // Si es desafío, limpiar fecha del desafío
         if ((reservation as any).challenge_id) {
             await this.prisma.challenge.update({
                 where: { id: (reservation as any).challenge_id },
@@ -276,7 +406,6 @@ export class ReservationsService {
             });
         }
 
-        // Notificar cancelación admin (solo reservas normales)
         if (!(reservation as any).is_challenge) {
             try {
                 const player = await this.prisma.player.findUnique({ where: { id: reservation.player_id } });

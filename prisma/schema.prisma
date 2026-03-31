@@ -41,6 +41,7 @@ model Player {
   has_debt         Boolean   @default(false)
   created_at       DateTime  @default(now())
   extra_high_demand_slots   Int       @default(0)
+  school_names  String[]  @default([])
 
   user     User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
   parent   Player? @relation("family", fields: [parent_id], references: [id])
@@ -206,6 +207,7 @@ model Reservation {
   created_at     DateTime  @default(now())
   is_challenge   Boolean   @default(false)
   challenge_id   String?
+  school_name   String?
   
 
   player Player @relation(fields: [player_id], references: [id])
