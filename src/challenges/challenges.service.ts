@@ -182,13 +182,23 @@ export class ChallengesService {
       if (!court || !court.is_active) throw new BadRequestException('Cancha no disponible.');
 
       const dateOnly = new Date(scheduledDate); dateOnly.setHours(0,0,0,0);
-      const h = scheduledDate.getHours().toString().padStart(2,'0');
-      const m = scheduledDate.getMinutes().toString().padStart(2,'0');
-      const slot = `${h}:${m}`;
+
+      // Extraer hora en zona Chile para evitar desfase UTC
+      const timeStr = scheduledDate.toLocaleTimeString('es-CL', {
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago'
+      });
+      const [h, m] = timeStr.split(':');
+      const slot = `${h.padStart(2,'0')}:${m.padStart(2,'0')}`;
+
+      // Fecha en zona Chile
+      const dateParts = scheduledDate.toLocaleDateString('es-CL', {
+        year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Santiago'
+      }).split('-');
+      const dateChile = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T00:00:00`);
 
       // Slot ocupado por otro partido
       const slotBusy = await (this.prisma as any).reservation.findFirst({
-        where: { court_id: courtId, date: dateOnly, time_slot: slot, status: 'active', NOT: { challenge_id: challengeId } }
+        where: { court_id: courtId, date: dateChile, time_slot: slot, status: 'active', NOT: { challenge_id: challengeId } }
       });
       if (slotBusy) throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
 
@@ -206,8 +216,8 @@ export class ChallengesService {
       if (isHighDemand) {
         const player = await this.prisma.player.findUnique({ where: { id: playerId }, include: { children: true } });
         if (player) {
-          const weekStart = new Date(dateOnly);
-          weekStart.setDate(dateOnly.getDate() - ((dateOnly.getDay()+6)%7));
+          const weekStart = new Date(dateChile);
+          weekStart.setDate(dateChile.getDate() - ((dateChile.getDay()+6)%7));
           weekStart.setHours(0,0,0,0);
           const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6); weekEnd.setHours(23,59,59,999);
 
@@ -236,7 +246,7 @@ export class ChallengesService {
         data: {
           player_id:      playerId,
           court_id:       courtId,
-          date:           dateOnly,
+          date:           dateChile,
           time_slot:      slot,
           is_high_demand: isHighDemand,
           has_guest:      false,
