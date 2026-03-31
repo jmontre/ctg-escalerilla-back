@@ -5,6 +5,12 @@ import { AdminPlayersService } from './admin-players.service';
 export class AdminPlayersController {
   constructor(private adminService: AdminPlayersService) {}
 
+  /** GET /admin/players/all — todos los jugadores incluyendo los sin posición */
+  @Get('all')
+  async getAllPlayers() {
+    return this.adminService.getAllPlayers();
+  }
+
   @Post()
   async createPlayer(@Body() data: {
     username: string;

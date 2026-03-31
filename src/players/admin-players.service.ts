@@ -178,6 +178,17 @@ export class AdminPlayersService {
     return updated;
   }
 
+  async getAllPlayers() {
+    return this.prisma.player.findMany({
+      include: {
+        user: { select: { username: true, is_admin: true, admin_role: true } },
+        parent:   { select: { id: true, name: true } },
+        children: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async resetImmunity(id: string) {
     return this.prisma.player.update({ where: { id }, data: { immune_until: null } });
   }
