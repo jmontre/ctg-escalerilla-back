@@ -7,6 +7,9 @@ import { whatsappService } from '../notifications/whatsapp.service';
 // Cada 6 horas: 00:00, 06:00, 12:00, 18:00
 const EVERY_6_HOURS = '0 0,6,12,18 * * *';
 
+// Cada hora en punto
+const EVERY_HOUR = '0 * * * *';
+
 // Horas de gracia para que el segundo jugador confirme su resultado
 const HOURS_TO_CONFIRM_RESULT = 4;
 
@@ -246,8 +249,44 @@ export class ChallengesCronService {
     console.log(`✅ Penalización aplicada: ${challenger.name} baja 1 posición`);
   }
 
+  @Cron(EVERY_HOUR)
+  async handleExpiredReservations() {
+    this.logger.log('⏰ Verificando reservas expiradas...');
+    const now = new Date();
+
+    try {
+      const active = await (this.prisma.reservation as any).findMany({
+        where: { status: 'active' },
+      });
+
+      let completed = 0;
+
+      for (const reservation of active) {
+        const datePart = reservation.date.toISOString().split('T')[0];
+        const [h, m]   = reservation.time_slot.split(':').map(Number);
+
+        // Hora de término en zona Chile = inicio + 90 minutos
+        const endTime = new Date(`${datePart}T${reservation.time_slot}:00`);
+        endTime.setMinutes(endTime.getMinutes() + 90);
+
+        if (endTime < now) {
+          await (this.prisma.reservation as any).update({
+            where: { id: reservation.id },
+            data:  { status: 'completed', cancelled_at: endTime }
+          });
+          completed++;
+        }
+      }
+
+      this.logger.log(`✅ Reservas completadas automáticamente: ${completed}`);
+    } catch (error) {
+      this.logger.error('❌ Error procesando reservas expiradas:', error);
+    }
+  }
+
   async runManually() {
     this.logger.log('🔧 Ejecución manual del cron job');
     await this.handleExpiredChallenges();
+    await this.handleExpiredReservations();
   }
 }
