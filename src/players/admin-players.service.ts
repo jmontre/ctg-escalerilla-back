@@ -1,10 +1,14 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppLogger } from '../common/app.logger';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AdminPlayersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private appLogger: AppLogger,
+  ) {}
 
   async createPlayer(data: {
     username: string;
@@ -65,6 +69,7 @@ export class AdminPlayersService {
       },
     });
 
+    this.appLogger.playerCreated(player.name, data.member_type || 'socio', data.admin_role || undefined);
     return player;
   }
 
@@ -126,7 +131,7 @@ export class AdminPlayersService {
       await this.prisma.user.update({ where: { id: player.user_id }, data: userUpdate });
     }
 
-    return this.prisma.player.update({
+    const result = this.prisma.player.update({
       where: { id },
       data: playerUpdate,
       include: {
@@ -135,6 +140,9 @@ export class AdminPlayersService {
         children: { select: { id: true, name: true } },
       },
     });
+    const changes = Object.keys(playerUpdate).concat(Object.keys(userUpdate)).join(', ');
+    this.appLogger.playerUpdated(player.name, changes);
+    return result;
   }
 
   async deletePlayer(id: string) {

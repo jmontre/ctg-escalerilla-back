@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { whatsappService } from '../notifications/whatsapp.service';
+import { AppLogger } from '../common/app.logger';
 
 const HIGH_DEMAND_SLOTS: Record<string, string[]> = {
     verano:   ['07:45', '09:30', '18:15', '20:00'],
@@ -22,7 +23,10 @@ function formatReservationDate(date: Date): string {
 
 @Injectable()
 export class ReservationsService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private appLogger: AppLogger,
+    ) {}
 
     // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -109,11 +113,9 @@ export class ReservationsService {
 
     async setBlocks(courtId: string, date: string, slots: string[], reason?: string) {
         const dateObj = new Date(date);
-        // Eliminar bloques existentes para esta cancha y fecha
         await (this.prisma as any).courtBlock.deleteMany({
             where: { court_id: courtId, date: dateObj }
         });
-        // Crear nuevos bloques
         if (slots.length > 0) {
             await (this.prisma as any).courtBlock.createMany({
                 data: slots.map(slot => ({
@@ -123,6 +125,11 @@ export class ReservationsService {
                     reason:   reason || null,
                 }))
             });
+            const court = await this.prisma.court.findUnique({ where: { id: courtId } });
+            this.appLogger.courtBlocked(court?.name || courtId, date, slots, reason);
+        } else {
+            const court = await this.prisma.court.findUnique({ where: { id: courtId } });
+            this.appLogger.courtUnblocked(court?.name || courtId, date);
         }
         return { message: 'Bloqueos actualizados correctamente.' };
     }
@@ -375,6 +382,7 @@ export class ReservationsService {
             }
         }
 
+        this.appLogger.reservationCreated(player.name, court.name, data.date, data.time_slot, isHighDemand, data.partner_name, data.school_name);
         return { message: 'Reserva creada correctamente.', reservation };
     }
 
@@ -427,6 +435,7 @@ export class ReservationsService {
             }
         }
 
+        this.appLogger.reservationCancelled(player.name, reservation.court?.name || 'Cancha', reservation.date.toISOString().split('T')[0], reservation.time_slot);
         return { message: 'Reserva cancelada correctamente.' };
     }
 
@@ -469,6 +478,7 @@ export class ReservationsService {
             }
         }
 
+        this.appLogger.reservationAdminCancelled(reservation.court?.name || 'Cancha', reservation.date.toISOString().split('T')[0], reservation.time_slot, reason);
         return { message: 'Reserva cancelada correctamente.' };
     }
 

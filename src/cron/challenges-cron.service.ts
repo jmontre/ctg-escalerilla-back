@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
 import { whatsappService } from '../notifications/whatsapp.service';
+import { AppLogger } from '../common/app.logger';
 
 // Cada 6 horas: 00:00, 06:00, 12:00, 18:00
 const EVERY_6_HOURS = '0 0,6,12,18 * * *';
@@ -19,7 +20,8 @@ export class ChallengesCronService {
 
   constructor(
     private prisma: PrismaService,
-    private rules: ChallengeRulesService
+    private rules: ChallengeRulesService,
+    private appLogger: AppLogger,
   ) { }
 
   @Cron(EVERY_6_HOURS)
@@ -81,6 +83,7 @@ export class ChallengesCronService {
       }
 
       this.logger.log(`✅ W.O. aplicado: ${challenge.challenger.name} sube`);
+      this.appLogger.challengeExpiredNotAccepted(challenge.challenger.name, challenge.challenged.name);
     }
 
     return expired.length;
@@ -118,6 +121,7 @@ export class ChallengesCronService {
       }
 
       this.logger.log(`✅ Penalización aplicada`);
+      this.appLogger.challengeExpiredNotPlayed(challenge.challenger.name, challenge.challenged.name);
     }
 
     return expired.length;
@@ -209,6 +213,11 @@ export class ChallengesCronService {
       }
 
       this.logger.log(`✅ Resultado auto-validado (${HOURS_TO_CONFIRM_RESULT}h sin confirmación)`);
+      this.appLogger.challengeAutoValidated(
+        winnerId === challenge.challenger_id ? challenge.challenger.name : challenge.challenged.name,
+        winnerId === challenge.challenger_id ? challenge.challenged.name : challenge.challenger.name,
+        confirmedResult.score
+      );
       processed++;
     }
 
@@ -279,6 +288,7 @@ export class ChallengesCronService {
       }
 
       this.logger.log(`✅ Reservas completadas automáticamente: ${completed}`);
+      this.appLogger.reservationCompleted(completed);
     } catch (error) {
       this.logger.error('❌ Error procesando reservas expiradas:', error);
     }

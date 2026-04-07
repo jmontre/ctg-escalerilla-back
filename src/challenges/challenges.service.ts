@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from './challenge-rules.service';
 import { whatsappService } from '../notifications/whatsapp.service';
 import { emailService } from '../notifications/email.service';
+import { AppLogger } from '../common/app.logger';
 import { add } from 'date-fns';
 
 const HIGH_DEMAND: Record<string, string[]> = {
@@ -14,7 +15,8 @@ const HIGH_DEMAND: Record<string, string[]> = {
 export class ChallengesService {
   constructor(
     private prisma: PrismaService,
-    private rules: ChallengeRulesService
+    private rules: ChallengeRulesService,
+    private appLogger: AppLogger,
   ) {}
 
   private sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
@@ -33,6 +35,7 @@ export class ChallengesService {
       if (challenged.phone) { await whatsappService.sendChallengeNotification(challenger.name, challenged.name, challenged.phone); await this.sleep(500); }
       await emailService.sendChallengeNotification(challenger.name, challenged.name, challenged.email);
     } catch (e) { console.error('⚠️ Error notificaciones:', e); }
+    this.appLogger.challengeCreated(challenger.name, challenged.name, challenger.position, challenged.position);
     return { message: 'Desafío creado exitosamente', challenge };
   }
 
@@ -75,6 +78,7 @@ export class ChallengesService {
       if (updated.challenger.phone) { await whatsappService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.phone); await this.sleep(500); }
       await emailService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.email);
     } catch (e) { console.error('⚠️ Error notificaciones aceptación:', e); }
+    this.appLogger.challengeAccepted(updated.challenger.name, updated.challenged.name);
     return { message: 'Desafío aceptado exitosamente', challenge: updated };
   }
 
@@ -92,6 +96,7 @@ export class ChallengesService {
 
     await this.rules.processWin(challengeId, challenge.challenger_id, challenge.challenged_id);
     await this.prisma.challenge.update({ where: { id: challengeId }, data: { status: 'rejected', resolved_at: new Date() } });
+    this.appLogger.challengeRejected(challenge.challenger.name, challenge.challenged.name);
 
     try {
       if (challenge.challenger.phone) {
@@ -302,6 +307,7 @@ export class ChallengesService {
       }
     } catch (e) { console.error('⚠️ Error notificación fecha grupo:', e); }
 
+    this.appLogger.challengeScheduled(updated.challenger.name, updated.challenged.name, formattedDate, courtName.replace(' · ', ''));
     return { message: 'Fecha del partido fijada correctamente', challenge: updated };
   }
 
@@ -358,6 +364,7 @@ export class ChallengesService {
           }
         } catch (e) { console.error('⚠️ Error resultado grupo:', e); }
 
+        this.appLogger.challengeResult(winner.name, loser.name, result1.score, winner.position, loser.position);
         return { message: 'Resultado confirmado. Posiciones actualizadas.', winner: { name: winner.name, new_position: winner.position }, loser: { name: loser.name, new_position: loser.position }, score: result1.score };
       } catch (error) {
         console.error('❌ Error en processDoubleConfirmation:', error);
@@ -370,6 +377,7 @@ export class ChallengesService {
         if (challenge.challenger.phone) { await whatsappService.sendMessage(challenge.challenger.phone, message); await this.sleep(600); }
         if (challenge.challenged.phone) { await whatsappService.sendMessage(challenge.challenged.phone, message); }
       } catch (e) { console.error('⚠️ Error notificaciones disputa:', e); }
+      this.appLogger.challengeDisputed(challenge.challenger.name, challenge.challenged.name, result1.score, result2.score);
       return { message: 'Los resultados no coinciden. Un administrador debe revisar el caso.', status: 'disputed', challenger_says: result1, challenged_says: result2 };
     }
   }

@@ -6,12 +6,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { whatsappService } from '../notifications/whatsapp.service';
+import { AppLogger } from '../common/app.logger';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private appLogger: AppLogger,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -43,6 +45,7 @@ export class AuthService {
     });
 
     const token = this.generateToken(user.id, user.is_admin, user.admin_role);
+    this.appLogger.register(player.name, user.username, user.email);
 
     return {
       token,
@@ -63,12 +66,19 @@ export class AuthService {
       include: { player: true },
     });
 
-    if (!user) throw new UnauthorizedException('Credenciales incorrectas');
+    if (!user) {
+      this.appLogger.loginFailed(dto.username);
+      throw new UnauthorizedException('Credenciales incorrectas');
+    }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
-    if (!isPasswordValid) throw new UnauthorizedException('Credenciales incorrectas');
+    if (!isPasswordValid) {
+      this.appLogger.loginFailed(dto.username);
+      throw new UnauthorizedException('Credenciales incorrectas');
+    }
 
     const token = this.generateToken(user.id, user.is_admin, user.admin_role);
+    this.appLogger.login(user.player?.name || user.username, user.username);
 
     return {
       token,
@@ -144,6 +154,7 @@ export class AuthService {
       .sendPasswordResetLink(user.player.name, user.player.phone, resetLink)
       .catch((err) => console.error('Error enviando WhatsApp reset:', err));
 
+    this.appLogger.passwordReset(user.player.name, user.player.phone);
     return genericResponse;
   }
 
