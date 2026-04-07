@@ -185,6 +185,7 @@ model Court {
   created_at DateTime @default(now())
 
   reservations Reservation[]
+  blocks CourtBlock[]
 
   @@map("courts")
 }
@@ -223,4 +224,16 @@ model SystemConfig {
   updated_at DateTime @default(now())
 
   @@map("system_config")
+}
+model CourtBlock {
+  id         String   @id @default(uuid())
+  court_id   String
+  date       DateTime @db.Date
+  time_slot  String?
+  reason     String?
+  created_at DateTime @default(now())
+
+  court Court @relation(fields: [court_id], references: [id])
+
+  @@map("court_blocks")
 }

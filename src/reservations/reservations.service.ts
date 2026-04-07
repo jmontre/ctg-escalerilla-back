@@ -61,6 +61,10 @@ export class ReservationsService {
             include: { player: { select: { id: true, name: true } }, court: true }
         });
 
+        const blocks = await (this.prisma as any).courtBlock.findMany({
+            where: { date: new Date(date) }
+        });
+
         return {
             date,
             season,
@@ -69,10 +73,15 @@ export class ReservationsService {
                 ...court,
                 slots: ALL_SLOTS.map(slot => {
                     const existing = reservations.find(r => r.court_id === court.id && r.time_slot === slot);
+                    const blocked  = blocks.find((b: any) =>
+                        b.court_id === court.id && (b.time_slot === slot || b.time_slot === null)
+                    );
                     return {
                         slot,
                         is_high_demand: highDemandSlots.includes(slot),
-                        available: !existing,
+                        available: !existing && !blocked,
+                        blocked: !!blocked,
+                        block_reason: blocked?.reason || null,
                         reservation: existing ? {
                             player_name:  (existing as any).school_name
                                 ? `Escuela ${(existing as any).school_name}`
@@ -87,6 +96,40 @@ export class ReservationsService {
                 }),
             })),
         };
+    }
+
+    // ── Court Blocks ─────────────────────────────────────────────────────────────
+
+    async getBlocks(date: string) {
+        return (this.prisma as any).courtBlock.findMany({
+            where: { date: new Date(date) },
+            include: { court: true }
+        });
+    }
+
+    async setBlocks(courtId: string, date: string, slots: string[], reason?: string) {
+        const dateObj = new Date(date);
+        // Eliminar bloques existentes para esta cancha y fecha
+        await (this.prisma as any).courtBlock.deleteMany({
+            where: { court_id: courtId, date: dateObj }
+        });
+        // Crear nuevos bloques
+        if (slots.length > 0) {
+            await (this.prisma as any).courtBlock.createMany({
+                data: slots.map(slot => ({
+                    court_id: courtId,
+                    date:     dateObj,
+                    time_slot: slot || null,
+                    reason:   reason || null,
+                }))
+            });
+        }
+        return { message: 'Bloqueos actualizados correctamente.' };
+    }
+
+    async deleteBlock(blockId: string) {
+        await (this.prisma as any).courtBlock.delete({ where: { id: blockId } });
+        return { message: 'Bloqueo eliminado.' };
     }
 
     // ── Reservations ────────────────────────────────────────────────────────────

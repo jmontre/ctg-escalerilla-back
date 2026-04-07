@@ -19,6 +19,21 @@ export class ReservationsController {
     }
   }
 
+  @Get('blocks')
+  getBlocks(@Query('date') date: string) {
+    return this.reservationsService.getBlocks(date);
+  }
+
+  @Post('blocks')
+  setBlocks(@Body() body: { court_id: string; date: string; slots: string[]; reason?: string }) {
+    return this.reservationsService.setBlocks(body.court_id, body.date, body.slots, body.reason);
+  }
+
+  @Delete('blocks/:id')
+  deleteBlock(@Param('id') id: string) {
+    return this.reservationsService.deleteBlock(id);
+  }
+
   @Get('courts')
   getCourts() { return this.reservationsService.getCourts(); }
 
