@@ -9,6 +9,7 @@ import { CronModule } from './cron/cron.module';
 import { MasterModule } from './master/master.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { TestController } from './test/test.controller';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { TestController } from './test/test.controller';
     CronModule,
     MasterModule,
     ReservationsModule,
+    CommonModule,
   ],
   controllers: [TestController],
 })
