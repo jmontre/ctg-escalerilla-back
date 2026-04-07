@@ -269,10 +269,10 @@ export class ReservationsService {
 
         if (!ALL_SLOTS.includes(data.time_slot)) throw new BadRequestException('Horario no válido.');
 
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const localDate = new Date(reservationDate.getTime() + reservationDate.getTimezoneOffset() * 60000);
-        localDate.setHours(0, 0, 0, 0);
-        if (localDate < today) throw new BadRequestException('No puedes reservar en fechas pasadas.');
+        // Validar fecha usando zona horaria Chile (UTC-3/UTC-4 según horario)
+        const todayChile = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }) + 'T00:00:00');
+        const dateChile  = new Date(data.date + 'T00:00:00');
+        if (dateChile < todayChile) throw new BadRequestException('No puedes reservar en fechas pasadas.');
 
         const court = await this.prisma.court.findUnique({ where: { id: data.court_id } });
         if (!court || !court.is_active) throw new BadRequestException('Cancha no disponible.');
