@@ -57,7 +57,7 @@ export class ReservationsService {
         const courts = await this.getCourts();
 
         const reservations = await this.prisma.reservation.findMany({
-            where: { date: new Date(date), status: 'active' },
+            where: { date: new Date(date), status: { in: ['active', 'completed'] } },
             include: { player: { select: { id: true, name: true } }, court: true }
         });
 
