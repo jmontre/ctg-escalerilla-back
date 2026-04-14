@@ -195,30 +195,33 @@ export class ReservationsService {
         const where = { date: { gte: monthStart, lte: monthEnd } };
         const prevWhere = { date: { gte: prevStart, lte: prevEnd } };
 
+        // Status "jugadas" = active (futura/hoy) + completed (ya ocurrió)
+        const PLAYED = { in: ['active', 'completed'] as string[] };
+
         // ── Totales separados: normales vs desafíos ──
-        const totalNormal     = await this.prisma.reservation.count({ where: { ...where, status: 'active', is_challenge: false } });
-        const totalChallenges = await this.prisma.reservation.count({ where: { ...where, status: 'active', is_challenge: true  } });
+        const totalNormal     = await this.prisma.reservation.count({ where: { ...where, status: PLAYED, is_challenge: false } });
+        const totalChallenges = await this.prisma.reservation.count({ where: { ...where, status: PLAYED, is_challenge: true  } });
         const totalActive     = totalNormal + totalChallenges;
         const totalCancelled  = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled' } });
         const totalCancelledNormal    = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled', is_challenge: false } });
         const totalCancelledChallenge = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled', is_challenge: true  } });
-        const prevNormal      = await this.prisma.reservation.count({ where: { ...prevWhere, status: 'active', is_challenge: false } });
+        const prevNormal      = await this.prisma.reservation.count({ where: { ...prevWhere, status: PLAYED, is_challenge: false } });
 
-        // ── Reservas normales activas (excluye desafíos) — base para todos los stats de socios ──
+        // ── Reservas normales jugadas (excluye desafíos) — base para todos los stats de socios ──
         const normalReservations = await this.prisma.reservation.findMany({
-            where: { ...where, status: 'active', is_challenge: false },
+            where: { ...where, status: PLAYED, is_challenge: false },
             include: { player: { select: { id: true, name: true, member_type: true } } },
         });
 
-        // ── Reservas de desafíos activas (para stats propios) ──
+        // ── Reservas de desafíos jugadas (para stats propios) ──
         const challengeReservations = await this.prisma.reservation.findMany({
-            where: { ...where, status: 'active', is_challenge: true },
+            where: { ...where, status: PLAYED, is_challenge: true },
             include: { player: { select: { id: true, name: true, member_type: true } } },
         });
 
-        // ── Con visita (solo reservas normales) ──
+        // ── Con visita (solo reservas normales jugadas) ──
         const withGuest = await this.prisma.reservation.findMany({
-            where: { ...where, has_guest: true, is_challenge: false },
+            where: { ...where, has_guest: true, is_challenge: false, status: PLAYED },
             include: { player: { select: { id: true, name: true, member_type: true } }, court: true },
             orderBy: { date: 'desc' },
         });
@@ -256,14 +259,14 @@ export class ReservationsService {
             .sort((a, b) => b.count - a.count);
 
         // ── Alta vs baja demanda (solo normales) ──
-        const highDemand = await this.prisma.reservation.count({ where: { ...where, is_high_demand: true, status: 'active', is_challenge: false } });
-        const lowDemand  = await this.prisma.reservation.count({ where: { ...where, is_high_demand: false, status: 'active', is_challenge: false } });
+        const highDemand = await this.prisma.reservation.count({ where: { ...where, is_high_demand: true, status: PLAYED, is_challenge: false } });
+        const lowDemand  = await this.prisma.reservation.count({ where: { ...where, is_high_demand: false, status: PLAYED, is_challenge: false } });
 
         // ── Por cancha (ambas, para ver ocupación real) ──
         const courts = await this.getCourts();
         const byCourt = await Promise.all(courts.map(async court => {
-            const countNormal    = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: 'active', is_challenge: false } });
-            const countChallenge = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: 'active', is_challenge: true  } });
+            const countNormal    = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: PLAYED, is_challenge: false } });
+            const countChallenge = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: PLAYED, is_challenge: true  } });
             const daysInMonth = monthEnd.getDate();
             const totalSlots  = daysInMonth * ALL_SLOTS.length;
             const total = countNormal + countChallenge;
