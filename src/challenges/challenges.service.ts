@@ -95,6 +95,7 @@ export class ChallengesService {
     if (challenge.status !== 'pending') throw new BadRequestException('Este desafío ya no está pendiente');
 
     await this.rules.processWin(challengeId, challenge.challenger_id, challenge.challenged_id);
+    await this.rules.applyPostMatchStatus(challenge.challenger_id, challenge.challenged_id);
     await this.prisma.challenge.update({ where: { id: challengeId }, data: { status: 'rejected', resolved_at: new Date() } });
     this.appLogger.challengeRejected(challenge.challenger.name, challenge.challenged.name);
 

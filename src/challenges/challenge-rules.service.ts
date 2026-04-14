@@ -310,14 +310,14 @@ export class ChallengeRulesService {
       console.log(`👑 ${winner.name} es #1 - SIN inmunidad`);
     }
 
-    // Perdedor queda vulnerable hasta fin del día
+    // Perdedor queda vulnerable 24 hrs
     await this.prisma.player.update({
       where: { id: loserId },
       data: {
-        vulnerable_until: new Date(new Date().setHours(23, 59, 59, 999))
+        vulnerable_until: add(new Date(), { hours: 24 })
       }
     });
-    console.log(`⚠️  ${loser.name} vulnerable hasta medianoche`);
+    console.log(`⚠️  ${loser.name} vulnerable por 24 hrs`);
   }
 
   /**

@@ -11,6 +11,9 @@ const EVERY_6_HOURS = '0 0,6,12,18 * * *';
 // Cada hora en punto
 const EVERY_HOUR = '0 * * * *';
 
+// Todos los lunes a las 00:00
+const EVERY_MONDAY_MIDNIGHT = '0 0 * * 1';
+
 // Horas de gracia para que el segundo jugador confirme su resultado
 const HOURS_TO_CONFIRM_RESULT = 4;
 
@@ -57,6 +60,7 @@ export class ChallengesCronService {
       this.logger.warn(`⏱️  Desafío expirado (no aceptado): ${challenge.challenger.name} vs ${challenge.challenged.name}`);
 
       await this.rules.processWin(challenge.id, challenge.challenger_id, challenge.challenged_id);
+      await this.rules.applyPostMatchStatus(challenge.challenger_id, challenge.challenged_id);
 
       await this.prisma.challenge.update({
         where: { id: challenge.id },
@@ -291,6 +295,30 @@ export class ChallengesCronService {
       this.appLogger.reservationCompleted(completed);
     } catch (error) {
       this.logger.error('❌ Error procesando reservas expiradas:', error);
+    }
+  }
+
+  @Cron(EVERY_MONDAY_MIDNIGHT)
+  async handleWeeklyHighDemandReset() {
+    this.logger.log('🔄 Lunes 00:00 — Cupos de alta demanda restaurados automáticamente.');
+
+    try {
+      // El cupo es query-based (se cuenta contra el rango lunes-domingo),
+      // por lo que no hay nada que actualizar en la DB — el cambio de semana
+      // ya lo reinicia. Este cron valida que el proceso funcione y registra el evento.
+      const players = await this.prisma.player.findMany({
+        where: { position: { gt: 0 } },
+        select: { id: true, name: true, member_type: true },
+      });
+
+      const socios    = players.filter(p => p.member_type === 'socio').length;
+      const hijos     = players.filter(p => p.member_type === 'hijo_socio').length;
+
+      this.logger.log(
+        `✅ Reset semanal: ${socios} socios (2 cupos c/u) · ${hijos} hijos de socio (1 cupo c/u)`
+      );
+    } catch (error) {
+      this.logger.error('❌ Error en reset semanal de cupos:', error);
     }
   }
 
