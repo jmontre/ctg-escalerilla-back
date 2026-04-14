@@ -195,27 +195,36 @@ export class ReservationsService {
         const where = { date: { gte: monthStart, lte: monthEnd } };
         const prevWhere = { date: { gte: prevStart, lte: prevEnd } };
 
-        // ── Totales ──
-        const totalActive    = await this.prisma.reservation.count({ where: { ...where, status: 'active' } });
-        const totalCancelled = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled' } });
-        const totalAll       = totalActive + totalCancelled;
-        const prevTotal      = await this.prisma.reservation.count({ where: { ...prevWhere, status: 'active' } });
+        // ── Totales separados: normales vs desafíos ──
+        const totalNormal     = await this.prisma.reservation.count({ where: { ...where, status: 'active', is_challenge: false } });
+        const totalChallenges = await this.prisma.reservation.count({ where: { ...where, status: 'active', is_challenge: true  } });
+        const totalActive     = totalNormal + totalChallenges;
+        const totalCancelled  = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled' } });
+        const totalCancelledNormal    = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled', is_challenge: false } });
+        const totalCancelledChallenge = await this.prisma.reservation.count({ where: { ...where, status: 'cancelled', is_challenge: true  } });
+        const prevNormal      = await this.prisma.reservation.count({ where: { ...prevWhere, status: 'active', is_challenge: false } });
 
-        // ── Todas las reservas activas del mes (incluye player para stats) ──
-        const allReservations = await this.prisma.reservation.findMany({
-            where: { ...where, status: 'active' },
+        // ── Reservas normales activas (excluye desafíos) — base para todos los stats de socios ──
+        const normalReservations = await this.prisma.reservation.findMany({
+            where: { ...where, status: 'active', is_challenge: false },
             include: { player: { select: { id: true, name: true, member_type: true } } },
         });
 
-        // ── Con visita ──
+        // ── Reservas de desafíos activas (para stats propios) ──
+        const challengeReservations = await this.prisma.reservation.findMany({
+            where: { ...where, status: 'active', is_challenge: true },
+            include: { player: { select: { id: true, name: true, member_type: true } } },
+        });
+
+        // ── Con visita (solo reservas normales) ──
         const withGuest = await this.prisma.reservation.findMany({
-            where: { ...where, has_guest: true },
+            where: { ...where, has_guest: true, is_challenge: false },
             include: { player: { select: { id: true, name: true, member_type: true } }, court: true },
             orderBy: { date: 'desc' },
         });
         const guestRevenue = withGuest.reduce((sum, r) => sum + (r.guest_fee || 3000), 0);
 
-        // ── Visitas por socio (cuántos invitados trajo cada jugador este mes) ──
+        // ── Visitas por socio ──
         const guestsByPlayer: Record<string, { name: string; count: number; member_type: string }> = {};
         for (const r of withGuest) {
             const pid = r.player_id;
@@ -228,16 +237,16 @@ export class ReservationsService {
             .map(([id, d]) => ({ player_id: id, ...d }))
             .sort((a, b) => b.count - a.count);
 
-        // ── Por tipo de socio ──
+        // ── Por tipo de socio (solo reservas normales) ──
         const byMemberType: Record<string, number> = { socio: 0, hijo_socio: 0, profe: 0, visita: 0 };
-        for (const r of allReservations) {
+        for (const r of normalReservations) {
             const mt = (r.player as any)?.member_type || 'socio';
             byMemberType[mt] = (byMemberType[mt] || 0) + 1;
         }
 
-        // ── Hijos de socios: detalle por jugador ──
+        // ── Hijos de socios: detalle por jugador (solo reservas normales) ──
         const hijosList: Record<string, { name: string; count: number }> = {};
-        for (const r of allReservations.filter((r: any) => r.player?.member_type === 'hijo_socio')) {
+        for (const r of normalReservations.filter((r: any) => r.player?.member_type === 'hijo_socio')) {
             const pid = r.player_id;
             if (!hijosList[pid]) hijosList[pid] = { name: (r.player as any)?.name || '?', count: 0 };
             hijosList[pid].count++;
@@ -246,34 +255,32 @@ export class ReservationsService {
             .map(([id, d]) => ({ player_id: id, ...d }))
             .sort((a, b) => b.count - a.count);
 
-        // ── Alta vs baja demanda ──
-        const highDemand = await this.prisma.reservation.count({ where: { ...where, is_high_demand: true, status: 'active' } });
-        const lowDemand  = await this.prisma.reservation.count({ where: { ...where, is_high_demand: false, status: 'active' } });
+        // ── Alta vs baja demanda (solo normales) ──
+        const highDemand = await this.prisma.reservation.count({ where: { ...where, is_high_demand: true, status: 'active', is_challenge: false } });
+        const lowDemand  = await this.prisma.reservation.count({ where: { ...where, is_high_demand: false, status: 'active', is_challenge: false } });
 
-        // ── Desafíos vs normales ──
-        const challenges = await (this.prisma.reservation as any).count({ where: { ...where, is_challenge: true, status: 'active' } });
-        const normal     = totalActive - challenges;
-
-        // ── Por cancha ──
+        // ── Por cancha (ambas, para ver ocupación real) ──
         const courts = await this.getCourts();
         const byCourt = await Promise.all(courts.map(async court => {
-            const count = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: 'active' } });
+            const countNormal    = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: 'active', is_challenge: false } });
+            const countChallenge = await this.prisma.reservation.count({ where: { ...where, court_id: court.id, status: 'active', is_challenge: true  } });
             const daysInMonth = monthEnd.getDate();
             const totalSlots  = daysInMonth * ALL_SLOTS.length;
-            return { court: court.name, count, occupancy: Math.round((count / totalSlots) * 100) };
+            const total = countNormal + countChallenge;
+            return { court: court.name, count: total, count_normal: countNormal, count_challenges: countChallenge, occupancy: Math.round((total / totalSlots) * 100) };
         }));
 
-        // ── Por horario ──
+        // ── Por horario (solo normales — más representativo del comportamiento de socios) ──
         const bySlot: Record<string, number> = {};
         for (const slot of ALL_SLOTS) bySlot[slot] = 0;
-        for (const r of allReservations) bySlot[r.time_slot] = (bySlot[r.time_slot] || 0) + 1;
+        for (const r of normalReservations) bySlot[r.time_slot] = (bySlot[r.time_slot] || 0) + 1;
         const bySlotArr = Object.entries(bySlot)
             .map(([slot, count]) => ({ slot, count }))
             .sort((a, b) => b.count - a.count);
 
-        // ── Top socios ──
+        // ── Top socios (solo reservas normales) ──
         const playerCount: Record<string, { name: string; count: number }> = {};
-        for (const r of allReservations) {
+        for (const r of normalReservations) {
             if (!playerCount[r.player_id]) {
                 playerCount[r.player_id] = { name: (r.player as any)?.name || 'Desconocido', count: 0 };
             }
@@ -284,26 +291,35 @@ export class ReservationsService {
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
 
-        // ── Reservas por día del mes ──
+        // ── Reservas normales por día del mes ──
         const byDay: Record<number, number> = {};
-        for (const r of allReservations) {
+        const byDayChallenge: Record<number, number> = {};
+        for (const r of normalReservations) {
             const day = new Date(r.date).getDate();
             byDay[day] = (byDay[day] || 0) + 1;
         }
+        for (const r of challengeReservations) {
+            const day = new Date(r.date).getDate();
+            byDayChallenge[day] = (byDayChallenge[day] || 0) + 1;
+        }
         const byDayArr = Array.from({ length: monthEnd.getDate() }, (_, i) => ({
             day: i + 1,
-            count: byDay[i + 1] || 0,
+            count:           byDay[i + 1] || 0,
+            count_challenge: byDayChallenge[i + 1] || 0,
         }));
 
         return {
             month: `${year}-${String(mon + 1).padStart(2, '0')}`,
             month_label: new Date(year, mon, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }),
             totals: {
-                active:    totalActive,
-                cancelled: totalCancelled,
-                all:       totalAll,
-                prev_month: prevTotal,
-                growth: prevTotal > 0 ? Math.round(((totalActive - prevTotal) / prevTotal) * 100) : 0,
+                active:              totalActive,
+                normal:              totalNormal,
+                challenges:          totalChallenges,
+                cancelled:           totalCancelled,
+                cancelled_normal:    totalCancelledNormal,
+                cancelled_challenge: totalCancelledChallenge,
+                prev_month: prevNormal,
+                growth: prevNormal > 0 ? Math.round(((totalNormal - prevNormal) / prevNormal) * 100) : 0,
             },
             guest: {
                 count:   withGuest.length,
@@ -325,7 +341,7 @@ export class ReservationsService {
                 by_player: hijosListArr,
             },
             demand: { high: highDemand, low: lowDemand },
-            type:   { challenges, normal },
+            type:   { challenges: totalChallenges, normal: totalNormal },
             by_court:  byCourt,
             by_slot:   bySlotArr,
             top_players: topPlayers,
