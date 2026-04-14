@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, Headers, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, UnauthorizedException } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
 import { JwtService } from '@nestjs/jwt';
 
@@ -88,6 +88,16 @@ export class ReservationsController {
   ) {
     const userId = this.getUserId(auth);
     return this.reservationsService.create(userId, body);
+  }
+
+  @Patch(':id/modify')
+  modify(
+    @Headers('authorization') auth: string,
+    @Param('id') id: string,
+    @Body() body: { court_id: string; date: string; time_slot: string; has_guest?: boolean; guest_name?: string; partner_name?: string }
+  ) {
+    const userId = this.getUserId(auth);
+    return this.reservationsService.modify(userId, id, body);
   }
 
   @Delete(':id')
