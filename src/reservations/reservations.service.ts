@@ -295,14 +295,15 @@ export class ReservationsService {
             .slice(0, 10);
 
         // ── Reservas normales por día del mes ──
+        // Usar getUTCDate() porque las fechas se almacenan como UTC midnight en Prisma
         const byDay: Record<number, number> = {};
         const byDayChallenge: Record<number, number> = {};
         for (const r of normalReservations) {
-            const day = new Date(r.date).getDate();
+            const day = new Date(r.date).getUTCDate();
             byDay[day] = (byDay[day] || 0) + 1;
         }
         for (const r of challengeReservations) {
-            const day = new Date(r.date).getDate();
+            const day = new Date(r.date).getUTCDate();
             byDayChallenge[day] = (byDayChallenge[day] || 0) + 1;
         }
         const byDayArr = Array.from({ length: monthEnd.getDate() }, (_, i) => ({
