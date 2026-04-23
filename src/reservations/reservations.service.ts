@@ -150,9 +150,15 @@ export class ReservationsService {
         });
     }
 
-    async getAllReservations(date?: string) {
+    async getAllReservations(date?: string, month?: string) {
         const where: any = {};
-        if (date) where.date = new Date(date);
+        if (date) {
+            where.date = new Date(date);
+        } else if (month) {
+            const year = parseInt(month.split('-')[0]);
+            const mon  = parseInt(month.split('-')[1]) - 1;
+            where.date = { gte: new Date(year, mon, 1), lte: new Date(year, mon + 1, 0, 23, 59, 59, 999) };
+        }
         return this.prisma.reservation.findMany({
             where,
             include: {

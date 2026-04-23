@@ -69,8 +69,8 @@ export class ReservationsController {
   }
 
   @Get()
-  getAllReservations(@Query('date') date?: string) {
-    return this.reservationsService.getAllReservations(date);
+  getAllReservations(@Query('date') date?: string, @Query('month') month?: string) {
+    return this.reservationsService.getAllReservations(date, month);
   }
 
   @Post()
