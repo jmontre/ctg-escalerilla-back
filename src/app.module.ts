@@ -13,7 +13,12 @@ import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'production'
+        ? '.env.production'
+        : '.env.development',
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
@@ -26,4 +31,4 @@ import { CommonModule } from './common/common.module';
   ],
   controllers: [TestController],
 })
-export class AppModule {}
+export class AppModule { }

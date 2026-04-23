@@ -37,3 +37,28 @@ npm-debug.log*
 
 # Prisma
 prisma/migrations/
+.env.production
+.env.dev
+
+# Build artifacts
+*.tsbuildinfo
+dist_test/
+scripts/*.js
+scripts/*.d.ts
+scripts/*.js.map
+
+# Database dumps
+backup*.sql
+
+# Root-level ad-hoc scripts (use scripts/ directory for .ts scripts)
+clean.js
+create-expired-challenges.js
+test-tipo3.js
+update-wp-ids.js
+current-positions.js
+current-positions.d.ts
+current-positions.js.map
+current-positions.json
+update-positions-only.js
+update-positions-only.d.ts
+update-positions-only.js.map
