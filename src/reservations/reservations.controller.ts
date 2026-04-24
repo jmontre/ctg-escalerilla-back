@@ -57,6 +57,21 @@ export class ReservationsController {
     return this.reservationsService.getStats(month);
   }
 
+  @Get('light-config')
+  getLightConfig(@Query('date') date: string) {
+    return this.reservationsService.getLightConfig(date);
+  }
+
+  @Post('light-config')
+  setLightConfig(@Body() body: { date: string; time_slots: string[]; amount_per_slot: number }) {
+    return this.reservationsService.setLightConfig(body.date, body.time_slots, body.amount_per_slot);
+  }
+
+  @Get('light-summary')
+  getLightSummary(@Query('month') month: string) {
+    return this.reservationsService.getLightSummary(month);
+  }
+
   @Get('my')
   getMyReservations(@Headers('authorization') auth: string) {
     const userId = this.getUserId(auth);

@@ -183,6 +183,76 @@ export class ReservationsService {
         return { reservations, weekUsage };
     }
 
+    // ── Light charge config ──────────────────────────────────────────────────────
+
+    async getLightConfig(date: string) {
+        const config = await this.prisma.lightChargeConfig.findUnique({
+            where: { date: new Date(date) },
+        });
+        return config ?? { date, time_slots: [], amount_per_slot: 3000 };
+    }
+
+    async setLightConfig(date: string, timeSlots: string[], amountPerSlot: number) {
+        return this.prisma.lightChargeConfig.upsert({
+            where:  { date: new Date(date) },
+            update: { time_slots: timeSlots, amount_per_slot: amountPerSlot, updated_at: new Date() },
+            create: { date: new Date(date), time_slots: timeSlots, amount_per_slot: amountPerSlot },
+        });
+    }
+
+    async getLightSummary(month: string) {
+        const year = parseInt(month.split('-')[0]);
+        const mon  = parseInt(month.split('-')[1]) - 1;
+        const start = new Date(year, mon, 1);
+        const end   = new Date(year, mon + 1, 0, 23, 59, 59, 999);
+
+        const configs = await this.prisma.lightChargeConfig.findMany({
+            where: { date: { gte: start, lte: end } },
+            orderBy: { date: 'asc' },
+        });
+
+        if (configs.length === 0) return { total_revenue: 0, by_day: [] };
+
+        const reservations = await this.prisma.reservation.findMany({
+            where: {
+                date:         { gte: start, lte: end },
+                is_challenge: false,
+                status:       { in: ['active', 'completed'] },
+            },
+            include: {
+                player: { select: { name: true } },
+                court:  { select: { name: true } },
+            },
+        });
+
+        let totalRevenue = 0;
+        const byDay = configs.map(cfg => {
+            const dateStr = new Date(cfg.date).toISOString().split('T')[0];
+            const charged = reservations.filter(r =>
+                new Date(r.date).toISOString().split('T')[0] === dateStr &&
+                cfg.time_slots.includes(r.time_slot),
+            );
+            const revenue = charged.length * cfg.amount_per_slot;
+            totalRevenue += revenue;
+            return {
+                date:           dateStr,
+                day:            new Date(cfg.date).getUTCDate(),
+                time_slots:     cfg.time_slots,
+                amount_per_slot: cfg.amount_per_slot,
+                count:          charged.length,
+                revenue,
+                detail: charged.map(r => ({
+                    player_name: (r.player as any)?.name,
+                    court:       (r.court as any)?.name,
+                    time_slot:   r.time_slot,
+                    amount:      cfg.amount_per_slot,
+                })),
+            };
+        });
+
+        return { total_revenue: totalRevenue, by_day: byDay };
+    }
+
     // ── Stats ────────────────────────────────────────────────────────────────────
 
     async getStats(month?: string) {

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -236,4 +237,16 @@ model CourtBlock {
   court Court @relation(fields: [court_id], references: [id])
 
   @@map("court_blocks")
+}
+
+model LightChargeConfig {
+  id              String   @id @default(uuid())
+  date            DateTime @db.Date
+  time_slots      String[]
+  amount_per_slot Int      @default(3000)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@unique([date])
+  @@map("light_charge_configs")
 }
