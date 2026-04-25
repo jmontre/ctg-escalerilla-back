@@ -14,6 +14,14 @@ const EVERY_HOUR = '0 * * * *';
 // Todos los lunes a las 00:00
 const EVERY_MONDAY_MIDNIGHT = '0 0 * * 1';
 
+function nowInChile(): Date {
+    const now = new Date();
+    return new Date(
+        now.toLocaleDateString('sv', { timeZone: 'America/Santiago' }) + 'T' +
+        now.toLocaleTimeString('sv', { timeZone: 'America/Santiago' }),
+    );
+}
+
 // Horas de gracia para que el segundo jugador confirme su resultado
 const HOURS_TO_CONFIRM_RESULT = 4;
 
@@ -265,7 +273,7 @@ export class ChallengesCronService {
   @Cron(EVERY_HOUR)
   async handleExpiredReservations() {
     this.logger.log('⏰ Verificando reservas expiradas...');
-    const now = new Date();
+    const now = nowInChile();
 
     try {
       const active = await (this.prisma.reservation as any).findMany({
@@ -276,9 +284,8 @@ export class ChallengesCronService {
 
       for (const reservation of active) {
         const datePart = reservation.date.toISOString().split('T')[0];
-        const [h, m]   = reservation.time_slot.split(':').map(Number);
 
-        // Hora de término en zona Chile = inicio + 90 minutos
+        // Hora de término en Chile naive = inicio + 90 minutos
         const endTime = new Date(`${datePart}T${reservation.time_slot}:00`);
         endTime.setMinutes(endTime.getMinutes() + 90);
 

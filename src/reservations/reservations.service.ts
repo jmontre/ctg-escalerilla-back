@@ -15,6 +15,17 @@ const ALL_SLOTS = [
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Devuelve la hora actual en Chile como Date "naive" (sin zona horaria),
+// comparable con new Date("YYYY-MM-DDTHH:MM:00") que también es naive.
+// Usar sv (sueco) porque da "YYYY-MM-DD" y "HH:MM:SS" siempre.
+function nowInChile(): Date {
+    const now = new Date();
+    return new Date(
+        now.toLocaleDateString('sv', { timeZone: 'America/Santiago' }) + 'T' +
+        now.toLocaleTimeString('sv', { timeZone: 'America/Santiago' }),
+    );
+}
+
 function formatReservationDate(date: Date): string {
     const datePart = date.toISOString().split('T')[0];
     const d = new Date(`${datePart}T12:00:00`);
@@ -533,7 +544,7 @@ export class ReservationsService {
 
         const datePart = reservation.date.toISOString().split('T')[0];
         const reservationDateTime = new Date(`${datePart}T${reservation.time_slot}:00`);
-        const hoursUntil = (reservationDateTime.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+        const hoursUntil = (reservationDateTime.getTime() - nowInChile().getTime()) / (1000 * 60 * 60);
 
         if (hoursUntil < 0) {
             throw new BadRequestException('No puedes cancelar una reserva que ya ocurrió.');
