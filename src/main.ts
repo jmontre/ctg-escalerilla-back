@@ -1,10 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { whatsappService } from './notifications/whatsapp.service';
+import { ChileLogger } from './common/chile-logger';
 import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: new ChileLogger() });
 
   // Aumentar límite para subida de imágenes en base64
   app.use(bodyParser.json({ limit: '10mb' }));
