@@ -5,6 +5,7 @@ import { whatsappService } from '../notifications/whatsapp.service';
 import { emailService } from '../notifications/email.service';
 import { AppLogger } from '../common/app.logger';
 import { add } from 'date-fns';
+import { toChileDateStr, chileWeekBoundsFromStr } from '../common/dates';
 
 const HIGH_DEMAND: Record<string, string[]> = {
   verano:   ['07:45', '09:30', '18:15', '20:00'],
@@ -197,10 +198,8 @@ export class ChallengesService {
       const slot = `${h.padStart(2,'0')}:${m.padStart(2,'0')}`;
 
       // Fecha en zona Chile
-      const dateParts = scheduledDate.toLocaleDateString('es-CL', {
-        year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Santiago'
-      }).split('-');
-      const dateChile = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T00:00:00`);
+      const chileDate = toChileDateStr(scheduledDate);
+      const dateChile = new Date(`${chileDate}T00:00:00`);
 
       // Slot ocupado por otro partido
       const slotBusy = await (this.prisma as any).reservation.findFirst({
@@ -222,10 +221,7 @@ export class ChallengesService {
       if (isHighDemand) {
         const player = await this.prisma.player.findUnique({ where: { id: playerId }, include: { children: true } });
         if (player) {
-          const weekStart = new Date(dateChile);
-          weekStart.setDate(dateChile.getDate() - ((dateChile.getDay()+6)%7));
-          weekStart.setHours(0,0,0,0);
-          const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6); weekEnd.setHours(23,59,59,999);
+          const { weekStart, weekEnd } = chileWeekBoundsFromStr(chileDate);
 
           const playerIds   = [playerId, ...(player.children?.map((c:any) => c.id) || [])];
           const extraSlots  = (player as any).extra_high_demand_slots ?? 0;

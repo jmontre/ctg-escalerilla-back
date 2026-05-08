@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, ForbiddenException 
 import { PrismaService } from '../prisma/prisma.service';
 import { whatsappService } from '../notifications/whatsapp.service';
 import { AppLogger } from '../common/app.logger';
+import { nowInChile, toChileDateStr, currentChileDate, chileWeekBoundsFromStr, monthBoundsUTC } from '../common/dates';
 
 const HIGH_DEMAND_SLOTS: Record<string, string[]> = {
     verano:   ['07:45', '09:30', '18:15', '20:00'],
@@ -14,17 +15,6 @@ const ALL_SLOTS = [
 ];
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-// Devuelve la hora actual en Chile como Date "naive" (sin zona horaria),
-// comparable con new Date("YYYY-MM-DDTHH:MM:00") que también es naive.
-// Usar sv (sueco) porque da "YYYY-MM-DD" y "HH:MM:SS" siempre.
-function nowInChile(): Date {
-    const now = new Date();
-    return new Date(
-        now.toLocaleDateString('sv', { timeZone: 'America/Santiago' }) + 'T' +
-        now.toLocaleTimeString('sv', { timeZone: 'America/Santiago' }),
-    );
-}
 
 function formatReservationDate(date: Date): string {
     const datePart = date.toISOString().split('T')[0];
@@ -168,7 +158,8 @@ export class ReservationsService {
         } else if (month) {
             const year = parseInt(month.split('-')[0]);
             const mon  = parseInt(month.split('-')[1]) - 1;
-            where.date = { gte: new Date(year, mon, 1), lte: new Date(year, mon + 1, 0, 23, 59, 59, 999) };
+            const { start: monthRangeStart, end: monthRangeEnd } = monthBoundsUTC(year, mon);
+            where.date = { gte: monthRangeStart, lte: monthRangeEnd };
         }
         return this.prisma.reservation.findMany({
             where,
@@ -214,8 +205,7 @@ export class ReservationsService {
     async getLightSummary(month: string) {
         const year = parseInt(month.split('-')[0]);
         const mon  = parseInt(month.split('-')[1]) - 1;
-        const start = new Date(year, mon, 1);
-        const end   = new Date(year, mon + 1, 0, 23, 59, 59, 999);
+        const { start, end } = monthBoundsUTC(year, mon);
 
         const configs = await this.prisma.lightChargeConfig.findMany({
             where: { date: { gte: start, lte: end } },
@@ -269,15 +259,13 @@ export class ReservationsService {
     async getStats(month?: string) {
         // Determinar rango del mes (default: mes actual)
         const now = new Date();
-        const year  = month ? parseInt(month.split('-')[0]) : now.getFullYear();
-        const mon   = month ? parseInt(month.split('-')[1]) - 1 : now.getMonth();
+        const year  = month ? parseInt(month.split('-')[0]) : now.getUTCFullYear();
+        const mon   = month ? parseInt(month.split('-')[1]) - 1 : now.getUTCMonth();
 
-        const monthStart = new Date(year, mon, 1);
-        const monthEnd   = new Date(year, mon + 1, 0, 23, 59, 59, 999);
+        const { start: monthStart, end: monthEnd } = monthBoundsUTC(year, mon);
 
         // Mes anterior para comparación
-        const prevStart = new Date(year, mon - 1, 1);
-        const prevEnd   = new Date(year, mon, 0, 23, 59, 59, 999);
+        const { start: prevStart, end: prevEnd } = monthBoundsUTC(year, mon - 1);
 
         const where = { date: { gte: monthStart, lte: monthEnd } };
         const prevWhere = { date: { gte: prevStart, lte: prevEnd } };
@@ -486,7 +474,7 @@ export class ReservationsService {
         }
 
         // Alta demanda: solo aplica a socios normales. Profes sin límite.
-        if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, reservationDate);
+        if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, data.date);
 
         const reservation = await this.prisma.reservation.create({
             data: {
@@ -648,7 +636,7 @@ export class ReservationsService {
         });
 
         try {
-            if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, reservationDate);
+            if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, data.date);
 
             const newReservation = await this.prisma.reservation.create({
                 data: {
@@ -751,18 +739,8 @@ export class ReservationsService {
         return player;
     }
 
-    private getWeekBounds(date: Date) {
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-        weekStart.setHours(0, 0, 0, 0);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        weekEnd.setHours(23, 59, 59, 999);
-        return { weekStart, weekEnd };
-    }
-
     private async getWeeklyUsageForPlayer(player: any) {
-        const { weekStart, weekEnd } = this.getWeekBounds(new Date());
+        const { weekStart, weekEnd } = chileWeekBoundsFromStr(currentChileDate());
         const playerIds = [player.id, ...(player.children?.map((c: any) => c.id) || [])];
 
         const used = await this.prisma.reservation.count({
@@ -792,8 +770,8 @@ export class ReservationsService {
         };
     }
 
-    private async checkHighDemandLimit(player: any, date: Date) {
-        const { weekStart, weekEnd } = this.getWeekBounds(date);
+    private async checkHighDemandLimit(player: any, dateStr: string) {
+        const { weekStart, weekEnd } = chileWeekBoundsFromStr(dateStr);
         const playerIds = [player.id, ...(player.children?.map((c: any) => c.id) || [])];
 
         // Contar turnos activos + cancelaciones tardías (el turno se descuenta igual)

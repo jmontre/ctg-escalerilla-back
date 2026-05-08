@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
 import { whatsappService } from '../notifications/whatsapp.service';
 import { AppLogger } from '../common/app.logger';
+import { nowInChile } from '../common/dates';
 
 // Cada 6 horas: 00:00, 06:00, 12:00, 18:00
 const EVERY_6_HOURS = '0 0,6,12,18 * * *';
@@ -13,14 +14,6 @@ const EVERY_HOUR = '0 * * * *';
 
 // Todos los lunes a las 00:00
 const EVERY_MONDAY_MIDNIGHT = '0 0 * * 1';
-
-function nowInChile(): Date {
-    const now = new Date();
-    return new Date(
-        now.toLocaleDateString('sv', { timeZone: 'America/Santiago' }) + 'T' +
-        now.toLocaleTimeString('sv', { timeZone: 'America/Santiago' }),
-    );
-}
 
 // Horas de gracia para que el segundo jugador confirme su resultado
 const HOURS_TO_CONFIRM_RESULT = 4;
