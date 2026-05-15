@@ -208,8 +208,17 @@ export class ChallengesService {
       if (slotBusy) throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
 
       // Otra reserva activa del jugador (que no sea de este desafío)
+      // OR explícito para manejar challenge_id NULL (reservas normales): NOT sobre campo nullable
+      // excluye registros con NULL en SQL, por lo que challenge_id=null no sería detectado sin el OR.
       const otherActive = await (this.prisma as any).reservation.findFirst({
-        where: { player_id: playerId, status: 'active', NOT: { challenge_id: challengeId } }
+        where: {
+          player_id: playerId,
+          status: 'active',
+          OR: [
+            { challenge_id: null },
+            { challenge_id: { not: challengeId } },
+          ],
+        }
       });
       if (otherActive) throw new BadRequestException('Ya tienes una reserva activa. Cancélala antes de fijar fecha.');
 
