@@ -3,14 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { jwtModuleOptions } from '../auth/jwt.config';
 
 @Module({
   imports: [
     PrismaModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '7d' },
-    }),
+    JwtModule.registerAsync(jwtModuleOptions),
   ],
   controllers: [ReservationsController],
   providers: [ReservationsService],

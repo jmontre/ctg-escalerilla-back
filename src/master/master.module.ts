@@ -3,14 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { MasterController } from './master.controller';
 import { MasterService } from './master.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { jwtModuleOptions } from '../auth/jwt.config';
 
 @Module({
   imports: [
     PrismaModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '7d' },
-    }),
+    JwtModule.registerAsync(jwtModuleOptions),
   ],
   controllers: [MasterController],
   providers: [MasterService],

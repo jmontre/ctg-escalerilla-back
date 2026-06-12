@@ -6,14 +6,12 @@ import { AdminPlayersController } from './admin-players.controller';
 import { AdminPlayersService } from './admin-players.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
+import { jwtModuleOptions } from '../auth/jwt.config';
 
 @Module({
   imports: [
     PrismaModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '7d' },
-    }),
+    JwtModule.registerAsync(jwtModuleOptions),
   ],
   controllers: [PlayersController, AdminPlayersController],
   providers: [PlayersService, AdminPlayersService, ChallengeRulesService],
