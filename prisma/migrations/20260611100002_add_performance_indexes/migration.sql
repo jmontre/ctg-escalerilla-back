@@ -9,6 +9,9 @@ CREATE INDEX IF NOT EXISTS "ranking_history_player_id_idx" ON "ranking_history"(
 
 -- Anti doble-booking: única reserva activa por cancha/fecha/horario.
 -- NO representable en schema.prisma (índice parcial) — excepción documentada en CLAUDE.md.
+-- PRE-DEPLOY: verificar que no existan duplicados activos o este CREATE falla:
+--   SELECT court_id, date, time_slot, COUNT(*) FROM reservations
+--   WHERE status = 'active' GROUP BY 1,2,3 HAVING COUNT(*) > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS "reservations_active_slot_uniq"
   ON "reservations"("court_id", "date", "time_slot")
   WHERE "status" = 'active';
