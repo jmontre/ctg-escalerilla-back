@@ -83,6 +83,9 @@ model Challenge {
   challenger Player @relation("challenger", fields: [challenger_id], references: [id])
   challenged Player @relation("challenged", fields: [challenged_id], references: [id])
 
+  @@index([status])
+  @@index([challenger_id])
+  @@index([challenged_id])
   @@map("challenges")
 }
 
@@ -96,6 +99,7 @@ model RankingHistory {
 
   player Player @relation(fields: [player_id], references: [id])
 
+  @@index([player_id])
   @@map("ranking_history")
 }
 
@@ -166,6 +170,8 @@ model MasterMatch {
   player2_id     String
   winner_id      String?
   score          String?
+  player1_result Json?
+  player2_result Json?
   status         String    @default("pending")
   scheduled_date DateTime?
   played_at      DateTime?
@@ -215,6 +221,9 @@ model Reservation {
   player Player @relation(fields: [player_id], references: [id])
   court  Court  @relation(fields: [court_id], references: [id])
 
+  @@index([date])
+  @@index([player_id, status])
+  @@index([challenge_id])
   @@map("reservations")
 }
 
