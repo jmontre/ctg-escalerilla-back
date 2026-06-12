@@ -6,11 +6,12 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // 1. Crear usuario admin
   const adminPasswordHash = await bcrypt.hash('admin123', 10);
-  
-  const adminUser = await prisma.user.create({
-    data: {
+
+  const adminUser = await prisma.user.upsert({
+    where:  { username: 'admin' },
+    update: {},
+    create: {
       username: 'admin',
       email: 'admin@ctg.cl',
       password_hash: adminPasswordHash,
@@ -18,9 +19,10 @@ async function main() {
     }
   });
 
-  // 2. Crear jugador admin (posición 0 - fuera de la escalerilla)
-  await prisma.player.create({
-    data: {
+  await prisma.player.upsert({
+    where:  { user_id: adminUser.id },
+    update: {},
+    create: {
       user_id: adminUser.id,
       name: 'Administrador CTG',
       email: 'admin@ctg.cl',
@@ -28,13 +30,10 @@ async function main() {
     }
   });
 
-  console.log('✅ Admin creado:');
+  console.log('✅ Admin creado/verificado:');
   console.log('   Username: admin');
-  console.log('   Password: admin123');
-  console.log('   Email: admin@ctg.cl');
+  console.log('   Password: admin123 (solo si es nuevo)');
   console.log('\n⚠️  CAMBIA ESTA CONTRASEÑA EN PRODUCCIÓN\n');
-
-  console.log('✅ Database seeded successfully!');
 }
 
 main()
