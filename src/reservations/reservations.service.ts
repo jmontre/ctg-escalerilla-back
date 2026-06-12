@@ -66,7 +66,7 @@ export class ReservationsService {
             include: { player: { select: { id: true, name: true } }, court: true }
         });
 
-        const blocks = await (this.prisma as any).courtBlock.findMany({
+        const blocks = await this.prisma.courtBlock.findMany({
             where: { date: new Date(date) }
         });
 
@@ -78,7 +78,7 @@ export class ReservationsService {
                 ...court,
                 slots: ALL_SLOTS.map(slot => {
                     const existing = reservations.find(r => r.court_id === court.id && r.time_slot === slot);
-                    const blocked  = blocks.find((b: any) =>
+                    const blocked  = blocks.find(b =>
                         b.court_id === court.id && (b.time_slot === slot || b.time_slot === null)
                     );
                     return {
@@ -88,14 +88,14 @@ export class ReservationsService {
                         blocked: !!blocked,
                         block_reason: blocked?.reason || null,
                         reservation: existing ? {
-                            player_name:  (existing as any).school_name
-                                ? `Escuela ${(existing as any).school_name}`
+                            player_name:  existing.school_name
+                                ? `Escuela ${existing.school_name}`
                                 : existing.player.name,
                             has_guest:    existing.has_guest,
                             guest_name:   existing.guest_name,
-                            partner_name: (existing as any).partner_name || null,
-                            is_challenge: (existing as any).is_challenge || false,
-                            school_name:  (existing as any).school_name  || null,
+                            partner_name: existing.partner_name || null,
+                            is_challenge: existing.is_challenge || false,
+                            school_name:  existing.school_name  || null,
                         } : null,
                     };
                 }),
@@ -106,7 +106,7 @@ export class ReservationsService {
     // ── Court Blocks ─────────────────────────────────────────────────────────────
 
     async getBlocks(date: string) {
-        return (this.prisma as any).courtBlock.findMany({
+        return this.prisma.courtBlock.findMany({
             where: { date: new Date(date) },
             include: { court: true }
         });
@@ -114,11 +114,11 @@ export class ReservationsService {
 
     async setBlocks(courtId: string, date: string, slots: string[], reason?: string) {
         const dateObj = new Date(date);
-        await (this.prisma as any).courtBlock.deleteMany({
+        await this.prisma.courtBlock.deleteMany({
             where: { court_id: courtId, date: dateObj }
         });
         if (slots.length > 0) {
-            await (this.prisma as any).courtBlock.createMany({
+            await this.prisma.courtBlock.createMany({
                 data: slots.map(slot => ({
                     court_id: courtId,
                     date:     dateObj,
@@ -136,7 +136,7 @@ export class ReservationsService {
     }
 
     async deleteBlock(blockId: string) {
-        await (this.prisma as any).courtBlock.delete({ where: { id: blockId } });
+        await this.prisma.courtBlock.delete({ where: { id: blockId } });
         return { message: 'Bloqueo eliminado.' };
     }
 
@@ -243,8 +243,8 @@ export class ReservationsService {
                 count:          charged.length,
                 revenue,
                 detail: charged.map(r => ({
-                    player_name: (r.player as any)?.name,
-                    court:       (r.court as any)?.name,
+                    player_name: r.player?.name,
+                    court:       r.court?.name,
                     time_slot:   r.time_slot,
                     amount:      cfg.amount_per_slot,
                 })),
@@ -307,7 +307,7 @@ export class ReservationsService {
         for (const r of withGuest) {
             const pid = r.player_id;
             if (!guestsByPlayer[pid]) {
-                guestsByPlayer[pid] = { name: (r.player as any)?.name || 'Desconocido', count: 0, member_type: (r.player as any)?.member_type || 'socio' };
+                guestsByPlayer[pid] = { name: r.player?.name || 'Desconocido', count: 0, member_type: r.player?.member_type || 'socio' };
             }
             guestsByPlayer[pid].count++;
         }
@@ -318,15 +318,15 @@ export class ReservationsService {
         // ── Por tipo de socio (solo reservas normales) ──
         const byMemberType: Record<string, number> = { socio: 0, hijo_socio: 0, profe: 0, visita: 0 };
         for (const r of normalReservations) {
-            const mt = (r.player as any)?.member_type || 'socio';
+            const mt = r.player?.member_type || 'socio';
             byMemberType[mt] = (byMemberType[mt] || 0) + 1;
         }
 
         // ── Hijos de socios: detalle por jugador (solo reservas normales) ──
         const hijosList: Record<string, { name: string; count: number }> = {};
-        for (const r of normalReservations.filter((r: any) => r.player?.member_type === 'hijo_socio')) {
+        for (const r of normalReservations.filter(r => r.player?.member_type === 'hijo_socio')) {
             const pid = r.player_id;
-            if (!hijosList[pid]) hijosList[pid] = { name: (r.player as any)?.name || '?', count: 0 };
+            if (!hijosList[pid]) hijosList[pid] = { name: r.player?.name || '?', count: 0 };
             hijosList[pid].count++;
         }
         const hijosListArr = Object.entries(hijosList)
@@ -360,7 +360,7 @@ export class ReservationsService {
         const playerCount: Record<string, { name: string; count: number }> = {};
         for (const r of normalReservations) {
             if (!playerCount[r.player_id]) {
-                playerCount[r.player_id] = { name: (r.player as any)?.name || 'Desconocido', count: 0 };
+                playerCount[r.player_id] = { name: r.player?.name || 'Desconocido', count: 0 };
             }
             playerCount[r.player_id].count++;
         }
@@ -405,8 +405,8 @@ export class ReservationsService {
                 revenue: guestRevenue,
                 list:    withGuest.map(r => ({
                     id:          r.id,
-                    player_name: (r.player as any)?.name,
-                    court:       (r.court as any)?.name,
+                    player_name: r.player?.name,
+                    court:       r.court?.name,
                     date:        r.date,
                     time_slot:   r.time_slot,
                     guest_name:  r.guest_name,
@@ -443,7 +443,7 @@ export class ReservationsService {
 
         if (player.has_debt) throw new ForbiddenException('No puedes reservar mientras tengas deuda pendiente.');
 
-        const isProfe = (player as any).member_type === 'profe';
+        const isProfe = player.member_type === 'profe';
 
         const season = await this.getSeason();
         const highDemandSlots = HIGH_DEMAND_SLOTS[season];
@@ -547,14 +547,14 @@ export class ReservationsService {
             data:  { status: 'cancelled', cancelled_at: new Date(), ...(cancelReason ? { cancel_reason: cancelReason } : {}) }
         });
 
-        if ((reservation as any).challenge_id) {
+        if (reservation.challenge_id) {
             await this.prisma.challenge.update({
-                where: { id: (reservation as any).challenge_id },
+                where: { id: reservation.challenge_id },
                 data:  { scheduled_date: null }
             });
         }
 
-        if (!(reservation as any).is_challenge) {
+        if (!reservation.is_challenge) {
             try {
                 if (player.phone) {
                     const fechaFormateada = formatReservationDate(reservation.date);
@@ -575,7 +575,7 @@ export class ReservationsService {
         this.appLogger.reservationCancelled(player.name, reservation.court?.name || 'Cancha', reservation.date.toISOString().split('T')[0], reservation.time_slot);
 
         if (isLateCancellation) {
-            const msg = (reservation as any).is_high_demand
+            const msg = reservation.is_high_demand
                 ? 'Reserva cancelada. El turno de alta demanda fue descontado de tu cupo semanal por cancelación tardía.'
                 : 'Reserva cancelada con menos de 3 turnos de anticipación. Ten en cuenta esta política para futuras reservas.';
             return { message: msg, late_cancellation: true };
@@ -600,11 +600,11 @@ export class ReservationsService {
         if (!oldReservation)                           throw new NotFoundException('Reserva no encontrada.');
         if (oldReservation.player_id !== player.id)    throw new ForbiddenException('No puedes modificar esta reserva.');
         if (oldReservation.status === 'cancelled')     throw new BadRequestException('Esta reserva ya está cancelada.');
-        if ((oldReservation as any).is_challenge)      throw new BadRequestException('Las reservas de desafíos se modifican desde la sección de desafíos.');
+        if (oldReservation.is_challenge)               throw new BadRequestException('Las reservas de desafíos se modifican desde la sección de desafíos.');
 
         if (!ALL_SLOTS.includes(data.time_slot))       throw new BadRequestException('Horario no válido.');
 
-        const isProfe = (player as any).member_type === 'profe';
+        const isProfe = player.member_type === 'profe';
         const season  = await this.getSeason();
         const isHighDemand = HIGH_DEMAND_SLOTS[season].includes(data.time_slot);
         const reservationDate = new Date(data.date);
@@ -697,14 +697,14 @@ export class ReservationsService {
             data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: reason || 'Cancelada por administrador' }
         });
 
-        if ((reservation as any).challenge_id) {
+        if (reservation.challenge_id) {
             await this.prisma.challenge.update({
-                where: { id: (reservation as any).challenge_id },
+                where: { id: reservation.challenge_id },
                 data:  { scheduled_date: null }
             });
         }
 
-        if (!(reservation as any).is_challenge) {
+        if (!reservation.is_challenge) {
             try {
                 const player = await this.prisma.player.findUnique({ where: { id: reservation.player_id } });
                 if (player?.phone) {
@@ -755,7 +755,7 @@ export class ReservationsService {
             }
         });
 
-        const extraSlots  = (player as any).extra_high_demand_slots ?? 0;
+        const extraSlots  = player.extra_high_demand_slots ?? 0;
         const baseLimit   = player.member_type === 'hijo_socio' ? 1 : 2 + (player.children?.length || 0);
         const totalLimit  = baseLimit + extraSlots;
 
@@ -787,7 +787,7 @@ export class ReservationsService {
             }
         });
 
-        const extraSlots  = (player as any).extra_high_demand_slots ?? 0;
+        const extraSlots  = player.extra_high_demand_slots ?? 0;
         const familyLimit = player.member_type === 'hijo_socio'
             ? 1
             : 2 + (player.children?.length || 0) + extraSlots;

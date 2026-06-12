@@ -208,7 +208,7 @@ export class ChallengesService {
       const dateChile = new Date(`${chileDate}T00:00:00`);
 
       // Slot ocupado por otro partido
-      const slotBusy = await (this.prisma as any).reservation.findFirst({
+      const slotBusy = await this.prisma.reservation.findFirst({
         where: { court_id: courtId, date: dateChile, time_slot: slot, status: 'active', NOT: { challenge_id: challengeId } }
       });
       if (slotBusy) throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
@@ -216,7 +216,7 @@ export class ChallengesService {
       // Otra reserva activa del jugador (que no sea de este desafío)
       // OR explícito para manejar challenge_id NULL (reservas normales): NOT sobre campo nullable
       // excluye registros con NULL en SQL, por lo que challenge_id=null no sería detectado sin el OR.
-      const otherActive = await (this.prisma as any).reservation.findFirst({
+      const otherActive = await this.prisma.reservation.findFirst({
         where: {
           player_id: playerId,
           status: 'active',
@@ -238,11 +238,11 @@ export class ChallengesService {
         if (player) {
           const { weekStart, weekEnd } = chileWeekBoundsFromStr(chileDate);
 
-          const playerIds   = [playerId, ...(player.children?.map((c:any) => c.id) || [])];
-          const extraSlots  = (player as any).extra_high_demand_slots ?? 0;
+          const playerIds   = [playerId, ...(player.children?.map(c => c.id) || [])];
+          const extraSlots  = player.extra_high_demand_slots ?? 0;
           const familyLimit = player.member_type === 'hijo_socio' ? 1 : 2 + (player.children?.length||0) + extraSlots;
 
-          const used = await (this.prisma as any).reservation.count({
+          const used = await this.prisma.reservation.count({
             where: { player_id: { in: playerIds }, is_high_demand: true, status: 'active', date: { gte: weekStart, lte: weekEnd }, NOT: { challenge_id: challengeId } }
           });
           if (used >= familyLimit) throw new BadRequestException(`Ya usaste los ${familyLimit} turnos de alta demanda de esta semana.`);
@@ -250,7 +250,7 @@ export class ChallengesService {
       }
 
       // Cancelar reserva anterior de este desafío
-      await (this.prisma as any).reservation.updateMany({
+      await this.prisma.reservation.updateMany({
         where: { challenge_id: challengeId, status: 'active' },
         data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Fecha reprogramada' }
       });
@@ -259,7 +259,7 @@ export class ChallengesService {
       const other = challenge.challenger_id === playerId ? challenge.challenged : challenge.challenger;
 
       // Crear nueva reserva
-      await (this.prisma as any).reservation.create({
+      await this.prisma.reservation.create({
         data: {
           player_id:      playerId,
           court_id:       courtId,
@@ -333,8 +333,8 @@ export class ChallengesService {
     });
     if (!challenge) throw new BadRequestException('Desafío no encontrado');
 
-    const result1 = challenge.challenger_result as any;
-    const result2 = challenge.challenged_result as any;
+    const result1 = challenge.challenger_result as { winnerId: string; score: string };
+    const result2 = challenge.challenged_result as { winnerId: string; score: string };
 
     if (result1.winnerId === result2.winnerId) {
       const winnerId = result1.winnerId;
@@ -351,7 +351,7 @@ export class ChallengesService {
         });
 
         // Liberar la reserva del desafío
-        await (this.prisma as any).reservation.updateMany({
+        await this.prisma.reservation.updateMany({
           where: { challenge_id: challengeId, status: 'active' },
           data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Partido completado' }
         });

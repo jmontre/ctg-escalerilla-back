@@ -189,7 +189,7 @@ export class MasterService {
 
     await this.prisma.masterMatch.update({
       where: { id: matchId },
-      data: { scheduled_date: scheduledDate } as any
+      data: { scheduled_date: scheduledDate }
     });
 
     const setter = match.player1_id === player.id ? match.player1 : match.player2;
@@ -242,14 +242,15 @@ export class MasterService {
 
     await this.prisma.masterMatch.update({
       where: { id: matchId },
-      data: updateData as any
+      data: updateData
     });
 
     // Obtener estado actualizado
     const updated = await this.prisma.masterMatch.findUnique({
       where: { id: matchId },
       include: { player1: true, player2: true }
-    }) as any;
+    });
+    if (!updated) throw new NotFoundException('Partido no encontrado');
 
     const hasP1 = updated.player1_result !== null;
     const hasP2 = updated.player2_result !== null;
@@ -276,7 +277,7 @@ export class MasterService {
       // Disputa
       await this.prisma.masterMatch.update({
         where: { id: matchId },
-        data: { status: 'disputed' } as any
+        data: { status: 'disputed' }
       });
 
       const message =

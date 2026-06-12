@@ -147,7 +147,7 @@ export class ChallengesCronService {
     let processed = 0;
 
     for (const challenge of pending) {
-      const referenceTime = (challenge as any).first_result_at ?? challenge.accepted_at;
+      const referenceTime = challenge.first_result_at ?? challenge.accepted_at;
       if (!referenceTime) continue;
 
       const hoursSinceFirstResult = (now.getTime() - new Date(referenceTime).getTime()) / (1000 * 60 * 60);
@@ -269,7 +269,7 @@ export class ChallengesCronService {
     const now = nowInChile();
 
     try {
-      const active = await (this.prisma.reservation as any).findMany({
+      const active = await this.prisma.reservation.findMany({
         where: { status: 'active' },
       });
 
@@ -283,7 +283,7 @@ export class ChallengesCronService {
         endTime.setMinutes(endTime.getMinutes() + 90);
 
         if (endTime < now) {
-          await (this.prisma.reservation as any).update({
+          await this.prisma.reservation.update({
             where: { id: reservation.id },
             data:  { status: 'completed', cancelled_at: endTime }
           });
