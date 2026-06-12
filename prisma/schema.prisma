@@ -251,7 +251,7 @@ model CourtBlock {
 model LightChargeConfig {
   id              String   @id @default(uuid())
   date            DateTime @db.Date
-  time_slots      String[]
+  time_slots      String[] @default([])
   amount_per_slot Int      @default(3000)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
