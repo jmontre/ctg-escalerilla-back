@@ -1,58 +1,32 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChallengeRulesService } from './challenge-rules.service';
 
 @Injectable()
 export class AdminChallengesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private rules: ChallengeRulesService,
+  ) {}
 
   async resolveChallenge(challengeId: string, winnerId: string, score: string) {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
-      include: {
-        challenger: true,
-        challenged: true,
-      },
+      include: { challenger: true, challenged: true },
     });
+    if (!challenge) throw new NotFoundException('Desafío no encontrado');
 
-    if (!challenge) {
-      throw new NotFoundException('Desafío no encontrado');
+    if (winnerId !== challenge.challenger_id && winnerId !== challenge.challenged_id) {
+      throw new BadRequestException('El ganador debe ser uno de los jugadores del desafío');
     }
+    const loserId = winnerId === challenge.challenger_id
+      ? challenge.challenged_id
+      : challenge.challenger_id;
 
-    const loserId =
-      winnerId === challenge.challenger_id
-        ? challenge.challenged_id
-        : challenge.challenger_id;
-
-    const winner = await this.prisma.player.findUnique({ where: { id: winnerId } });
-    const loser  = await this.prisma.player.findUnique({ where: { id: loserId } });
-
-    if (!winner || !loser) {
-      throw new NotFoundException('Jugadores no encontrados');
-    }
-
-    if (winnerId === challenge.challenger_id && winner.position > loser.position) {
-      const targetPosition  = loser.position;
-      const oldWinnerPosition = winner.position;
-
-      await this.prisma.player.updateMany({
-        where: { position: { gte: targetPosition, lt: oldWinnerPosition } },
-        data:  { position: { increment: 1 } },
-      });
-
-      await this.prisma.player.update({
-        where: { id: winnerId },
-        data:  { position: targetPosition },
-      });
-
-      await this.prisma.rankingHistory.create({
-        data: {
-          player_id:    winnerId,
-          position:     targetPosition,
-          old_position: oldWinnerPosition,
-          reason:       `Ganó desafío vs ${loser.name} - Resuelto por admin`,
-        },
-      });
-    }
+    // Misma lógica que el flujo normal: corrimiento + historial + inmunidad/vulnerabilidad + stats
+    await this.rules.processWin(challengeId, winnerId, loserId);
+    await this.rules.applyPostMatchStatus(winnerId, loserId);
+    await this.rules.updateStats(winnerId, loserId);
 
     const updated = await this.prisma.challenge.update({
       where: { id: challengeId },
@@ -66,22 +40,10 @@ export class AdminChallengesService {
       include: { challenger: true, challenged: true },
     });
 
-    await this.prisma.player.update({
-      where: { id: winnerId },
-      data: {
-        wins:          { increment: 1 },
-        total_matches: { increment: 1 },
-        immune_until:  new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
-    });
-
-    await this.prisma.player.update({
-      where: { id: loserId },
-      data: {
-        losses:           { increment: 1 },
-        total_matches:    { increment: 1 },
-        vulnerable_until: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
+    // Liberar la reserva del desafío (igual que processDoubleConfirmation)
+    await this.prisma.reservation.updateMany({
+      where: { challenge_id: challengeId, status: 'active' },
+      data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Partido completado' },
     });
 
     return updated;
