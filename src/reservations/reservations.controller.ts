@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, Unau
 import { ReservationsService } from './reservations.service';
 import { JwtService } from '@nestjs/jwt';
 import { Admin } from '../auth/admin.decorator';
+import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @Controller('reservations')
 export class ReservationsController {
@@ -101,15 +102,7 @@ export class ReservationsController {
   @Post()
   create(
     @Headers('authorization') auth: string,
-    @Body() body: {
-      court_id: string;
-      date: string;
-      time_slot: string;
-      has_guest?: boolean;
-      guest_name?: string;
-      partner_name?: string;
-      school_name?: string;
-    }
+    @Body() body: CreateReservationDto
   ) {
     const userId = this.getUserId(auth);
     return this.reservationsService.create(userId, body);
@@ -119,7 +112,7 @@ export class ReservationsController {
   modify(
     @Headers('authorization') auth: string,
     @Param('id') id: string,
-    @Body() body: { court_id: string; date: string; time_slot: string; has_guest?: boolean; guest_name?: string; partner_name?: string }
+    @Body() body: CreateReservationDto
   ) {
     const userId = this.getUserId(auth);
     return this.reservationsService.modify(userId, id, body);

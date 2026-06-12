@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
 import { AdminPlayersService } from './admin-players.service';
 import { Admin } from '../auth/admin.decorator';
+import { CreatePlayerDto, UpdatePlayerDto } from './dto/admin-player.dto';
 
 @Admin()
 @Controller('admin/players')
@@ -14,39 +15,14 @@ export class AdminPlayersController {
   }
 
   @Post()
-  async createPlayer(@Body() data: {
-    username: string;
-    email: string;
-    password: string;
-    name: string;
-    phone?: string;
-    position?: number;
-    member_type?: string;
-    parent_id?: string;
-    has_debt?: boolean;
-    admin_role?: string | null;
-  }) {
+  async createPlayer(@Body() data: CreatePlayerDto) {
     return this.adminService.createPlayer(data);
   }
 
   @Put(':id')
   async updatePlayer(
     @Param('id') id: string,
-    @Body() data: {
-      name?: string;
-      email?: string;
-      phone?: string;
-      position?: number | null;
-      wins?: number;
-      losses?: number;
-      total_matches?: number;
-      immune_until?: string | null;
-      vulnerable_until?: string | null;
-      member_type?: string;
-      parent_id?: string | null;
-      has_debt?: boolean;
-      admin_role?: string | null;
-    }
+    @Body() data: UpdatePlayerDto
   ) {
     return this.adminService.updatePlayer(id, data);
   }
