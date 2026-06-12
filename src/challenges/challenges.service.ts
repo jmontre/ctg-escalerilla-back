@@ -67,14 +67,14 @@ export class ChallengesService {
     if (challenge.status !== 'pending') throw new BadRequestException('Este desafío ya no está pendiente');
     if (new Date() > challenge.accept_deadline) throw new BadRequestException('El plazo para aceptar ya expiró');
 
-    const updated = await this.prisma.challenge.update({
-      where: { id: challengeId },
-      data: { status: 'accepted', accepted_at: new Date() },
-      include: {
-        challenger: { select: { id: true, name: true, email: true, phone: true } },
-        challenged: { select: { id: true, name: true, email: true, phone: true } }
-      }
+    // Claim atómico: solo avanza si sigue pending (doble click / colisión con cron)
+    const claimed = await this.prisma.challenge.updateMany({
+      where: { id: challengeId, status: 'pending' },
+      data:  { status: 'accepted', accepted_at: new Date() },
     });
+    if (claimed.count === 0) throw new BadRequestException('Este desafío ya no está pendiente');
+
+    const updated = { ...challenge, status: 'accepted' as const, accepted_at: new Date() };
     try {
       if (updated.challenger.phone) { await whatsappService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.phone); await this.sleep(500); }
       await emailService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.email);
