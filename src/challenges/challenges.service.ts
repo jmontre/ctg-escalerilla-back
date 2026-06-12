@@ -93,11 +93,17 @@ export class ChallengesService {
     });
     if (!challenge) throw new BadRequestException('Desafío no encontrado');
     if (challenge.challenged_id !== playerId) throw new BadRequestException('Solo el desafiado puede rechazar');
-    if (challenge.status !== 'pending') throw new BadRequestException('Este desafío ya no está pendiente');
+
+    // Update atómico: solo avanza si sigue en 'pending'. Previene doble procesamiento
+    // ante requests concurrentes (doble click) o colisión con el cron.
+    const claimed = await this.prisma.challenge.updateMany({
+      where: { id: challengeId, status: 'pending' },
+      data:  { status: 'rejected', resolved_at: new Date() },
+    });
+    if (claimed.count === 0) throw new BadRequestException('Este desafío ya no está pendiente');
 
     await this.rules.processWin(challengeId, challenge.challenger_id, challenge.challenged_id);
     await this.rules.applyPostMatchStatus(challenge.challenger_id, challenge.challenged_id);
-    await this.prisma.challenge.update({ where: { id: challengeId }, data: { status: 'rejected', resolved_at: new Date() } });
     this.appLogger.challengeRejected(challenge.challenger.name, challenge.challenged.name);
 
     try {
