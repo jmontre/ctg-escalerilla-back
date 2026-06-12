@@ -1,301 +1,283 @@
-# CLAUDE.md - CTG API Escalerilla Backend
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Resumen del Proyecto
 
-Backend del sistema del **Club de Tenis Graneros (CTG)**. Gestiona la Escalerilla (ranking tipo ladder), desafíos entre jugadores, torneo Master, reservas de canchas, notificaciones y administración.
+Backend del **Club de Tenis Graneros (CTG)**. Gestiona la Escalerilla (ranking tipo ladder), desafíos entre jugadores, torneo Master, reservas de canchas (con cupos de alta demanda, cobro de luz y bloqueos), notificaciones WhatsApp/email y administración.
 
-**Stack:** NestJS 11 + TypeScript + PostgreSQL + Prisma ORM
-**Despliegue:** Docker en Railway (Supabase como DB)
+**Stack:** NestJS 11 + TypeScript + PostgreSQL + Prisma ORM 5
+**Despliegue:** Railway (Supabase como DB) — ver sección Despliegue
 **Puerto:** 3000 (configurable vía `PORT`)
 
+Existe también `ONBOARDING.md` (guía para colaboradores que vienen de PHP/WordPress). Ojo: menciona `.env.development`, pero el nombre real del archivo es `.env.dev`. El `README.md` es el boilerplate de NestJS, sin información del proyecto.
+
 ---
 
-## Comandos Principales
+## Comandos
 
 ```bash
-npm install                  # Instalar dependencias
-npm run build                # Compilar TypeScript (genera dist/)
-npm run start:dev            # Desarrollo con watch mode
-npm run start:prod           # Producción: node dist/main.js
-npm run lint                 # ESLint
-npm run test                 # Tests unitarios (Jest)
-npx prisma migrate dev       # Crear/aplicar migraciones en desarrollo
-npx prisma migrate deploy    # Aplicar migraciones en producción
-npx prisma generate          # Regenerar Prisma Client
-npx prisma studio            # UI visual para la base de datos
+npm run start:dev          # Desarrollo con watch mode
+npm run build              # Compilar (usa --noEmitOnError false a propósito)
+npm run start:prod         # Producción: node dist/main.js
+npm run lint               # ESLint + auto-fix
+npm run test               # Jest (tests en src/**/*.spec.ts — solo hay 2: app.controller y common/dates)
+npm run test:e2e           # Tests end-to-end
+
+# Un test específico
+npx jest src/common/dates.spec.ts
+
+# Prisma
+npx prisma generate        # Regenerar Prisma Client tras cambios en schema
+npx prisma studio          # UI visual de la DB
+npx prisma db seed         # Ejecutar seed (crea admin/admin123)
+# ⚠️ Antes de usar migrate dev/deploy, leer la sección "Schema y Migraciones (DRIFT)"
+
+# Scripts de utilidad (cargas masivas, fixes de posiciones/teléfonos)
+npx ts-node scripts/<nombre>.ts
 ```
 
+Archivos de entorno: `.env.dev` (dev, **no** `.env.development`) y `.env.production` (cuando `NODE_ENV=production`). Ver `src/app.module.ts`.
+
 ---
 
-## Estructura del Proyecto
+## Arquitectura
+
+### Módulos NestJS
 
 ```
-src/
-├── main.ts                          # Entry point (CORS, WhatsApp init, puerto)
-├── app.module.ts                    # Módulo raíz (importa todos los módulos)
-├── auth/
-│   ├── auth.module.ts
-│   ├── auth.controller.ts           # /auth/register, /login, /me, /forgot-password, /reset-password
-│   ├── auth.service.ts              # JWT, bcryptjs, registro/login, reset de password
-│   ├── wordpress-auth.guard.ts      # Guard WordPress (implementado, no activo en rutas)
-│   ├── wordpress-auth.service.ts    # Verifica sesiones WordPress via API
-│   ├── wp-user.decorator.ts
-│   └── dto/
-│       ├── login.dto.ts
-│       └── register.dto.ts
-├── players/
-│   ├── players.module.ts
-│   ├── players.controller.ts        # /players, /players/:id, /players/me, avatares
-│   ├── players.service.ts           # CRUD jugadores, desafíos disponibles, avatares
-│   ├── admin-players.controller.ts  # /admin/players CRUD + utilidades admin
-│   ├── admin-players.service.ts     # Mover posiciones, inmunidad/vulnerabilidad, uso semanal
-│   └── cloudinary.service.ts        # Upload/delete de avatares en Cloudinary
-├── challenges/
-│   ├── challenges.module.ts
-│   ├── challenges.controller.ts     # CRUD desafíos, aceptar/rechazar/resultado/programar
-│   ├── challenges.service.ts        # Lógica de desafíos y doble confirmación
-│   ├── challenge-rules.service.ts   # REGLAS DE NEGOCIO: niveles, validaciones, shifts de ranking
-│   ├── admin-challenges.controller.ts  # /admin/challenges: resolver, cancelar, forzar, extender
-│   └── admin-challenges.service.ts
-├── cron/
-│   ├── cron.module.ts
-│   ├── cron.controller.ts           # POST /cron/run (trigger manual)
-│   └── challenges-cron.service.ts   # Jobs automáticos (ver sección Cron Jobs)
-├── master/
-│   ├── master.module.ts
-│   ├── master.controller.ts         # /master: temporadas, grupos, partidos, resultados
-│   └── master.service.ts            # Generación de grupos, resultados, final automática
-├── reservations/
-│   ├── reservations.module.ts
-│   ├── reservations.controller.ts   # /reservations: disponibilidad, bloques, estadísticas
-│   └── reservations.service.ts      # Lógica de reservas, alta demanda, límites semanales
-├── notifications/
-│   ├── email.service.ts             # Resend.com (escalerilla@clubdetenisgraneros.cl)
-│   └── whatsapp.service.ts          # whatsapp-web.js con Chromium
-├── common/
-│   ├── common.module.ts             # Módulo global
-│   └── app.logger.ts                # Logger estructurado para eventos clave
-├── prisma/
-│   ├── prisma.module.ts             # Módulo global
-│   └── prisma.service.ts            # Conexión PostgreSQL
-└── test/
-    └── test.controller.ts           # /test/whatsapp, /test/grupos (solo desarrollo)
-
-scripts/                             # Scripts TypeScript de utilidad/migración (ejecutar con ts-node)
-prisma/
-├── schema.prisma                    # Schema ORM
-├── seed.ts                          # Seed: usuario admin por defecto
-└── migrations/                      # Migraciones (ignoradas en git, se aplican en deploy)
+AppModule
+├── ConfigModule (global, .env.production | .env.dev según NODE_ENV)
+├── ScheduleModule (cron jobs)
+├── PrismaModule (global, expone PrismaService)
+├── CommonModule (global, expone AppLogger)
+├── AuthModule (JWT 7 días)
+├── PlayersModule (PlayersController + AdminPlayersController)
+├── ChallengesModule (ChallengesController + AdminChallengesController)
+├── CronModule (ChallengesCronService con 3 cron jobs)
+├── MasterModule
+└── ReservationsModule
 ```
 
----
+`TestController` está registrado directamente en `AppModule` (sin módulo propio). Expone endpoints de prueba de WhatsApp (`POST /test/whatsapp`, `GET /test/grupos`, `POST /test/grupo`).
 
-## Base de Datos (PostgreSQL + Prisma)
+### Mapa de Endpoints (prefijos)
 
-Schema en `prisma/schema.prisma`. Tablas mapeadas con `@@map()`.
+| Prefijo | Controller | Notas |
+|---------|-----------|-------|
+| `/auth` | register, login, me, forgot-password, reset-password | reset por WhatsApp |
+| `/players` | lista pública (excluye admins), perfil propio (`PUT /me`), avatar | |
+| `/admin/players` | CRUD jugadores, move, reset-immunity/vulnerability, weekly-usage | |
+| `/challenges` | create, accept, reject, result, schedule | |
+| `/admin/challenges` | resolve, cancel, force delete, extend deadline | |
+| `/master` | generate, schedule, player-result, result (admin), check-final | |
+| `/reservations` | availability, courts, season, blocks, stats, light-config/summary, my, CRUD | |
+| `/cron` | `POST /cron/run` (trigger manual) | |
+| `/test` | pruebas WhatsApp | sin auth |
 
-### User (`users`)
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| id | UUID (PK) | Auto-generado |
-| username | String | Único |
-| email | String | Único |
-| password_hash | String | bcryptjs, 10 rounds |
-| is_admin | Boolean | Default false |
-| admin_role | String? | `null` \| `"escalerilla"` \| `"reservas"` \| `"all"` |
-| created_at | DateTime | Auto |
-| updated_at | DateTime | Auto |
+### Patrón Singleton para Servicios Externos
 
-Relaciones: `User 1:1 Player` (cascade delete), `User 1:N PasswordResetToken`
+`whatsappService` y `emailService` son instancias exportadas a nivel de módulo, **no providers NestJS**:
 
-### Player (`players`)
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| id | UUID (PK) | Auto-generado |
-| user_id | String (FK) | Único, ref → User |
-| name | String | Nombre completo |
-| email | String | Único |
-| phone | String? | Formato chileno (+569...) |
-| avatar_url | String? | URL de Cloudinary |
-| position | Int? | Nullable — null = fuera de escalerilla |
-| wins | Int | Default 0 |
-| losses | Int | Default 0 |
-| total_matches | Int | Default 0 |
-| immune_until | DateTime? | 24hrs post-victoria |
-| vulnerable_until | DateTime? | Hasta medianoche post-derrota |
-| member_type | String | `"socio"` \| `"alumno"` \| `"invitado"` |
-| parent_id | String? | FK → Player (relación familiar) |
-| has_debt | Boolean | Default false — bloquea reservas |
-| extra_high_demand_slots | Int | Default 0 — slots extra de alta demanda |
-| school_names | String[] | Escuelas del jugador |
+```ts
+// notifications/whatsapp.service.ts
+export const whatsappService = new WhatsAppService();
+// notifications/email.service.ts
+export const emailService = new EmailService();
+```
 
-Relaciones: `challenges_made`, `challenges_received`, `ranking_history`, `master_group_players`, `master_matches`, `reservations`
+Se importan directamente. Es intencional: WhatsApp mantiene una sesión Puppeteer/Chromium persistente durante toda la vida del proceso (se inicializa en `main.ts` antes de `app.listen`).
 
-### Challenge (`challenges`)
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| id | UUID (PK) | |
-| challenger_id | String (FK) | Ref → Player |
-| challenged_id | String (FK) | Ref → Player |
-| status | String | `pending`, `accepted`, `completed`, `rejected`, `disputed`, `expired_not_accepted`, `expired_not_played`, `cancelled` |
-| accept_deadline | DateTime | 24hrs desde creación |
-| play_deadline | DateTime | 5 días desde creación |
-| scheduled_date | DateTime? | Fecha acordada para jugar |
-| accepted_at / first_result_at / played_at / resolved_at | DateTime? | Timestamps de ciclo de vida |
-| challenger_result / challenged_result | JSON? | `{winnerId, score}` |
-| results_match | Boolean? | true si ambos coinciden |
-| winner_id | String? | |
-| final_score | String? | |
+### Autenticación sin Guards NestJS
 
-### RankingHistory (`ranking_history`)
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| id | UUID (PK) | |
-| player_id | String (FK) | |
-| position | Int | Nueva posición |
-| old_position | Int? | Posición anterior |
-| reason | String? | `challenge_won`, `challenge_lost`, `penalty`, `opponent_penalty`, etc. |
+Las rutas **no usan `@UseGuards()`**. La verificación JWT se hace manualmente en cada controller, extrayendo `Authorization: Bearer <token>`:
 
-### PasswordResetToken (`password_reset_tokens`)
-Tokens UUID de un solo uso con expiración para recuperación de contraseña.
+```ts
+private getUserId(auth: string): string {
+  const payload = this.jwtService.verify(auth.split(' ')[1]);
+  return payload.sub;
+}
+```
 
-### MasterSeason / MasterGroup / MasterGroupPlayer / MasterMatch (`master_*`)
-Tablas del torneo Master. `MasterSeason` → grupos → jugadores y partidos. Round robin + final.
+El payload JWT contiene `{ sub: userId, is_admin: boolean, admin_role: string | null }`. `admin_role` ∈ `null | "escalerilla" | "reservas" | "all"`. Las rutas admin **no tienen protección por guard** — confían en que el frontend solo muestra esas opciones a admins.
 
-### Court / Reservation / CourtBlock / SystemConfig
-Tablas del sistema de reservas de canchas. `Court` → `Reservation` (con franjas horarias). `CourtBlock` para bloquear horarios. `SystemConfig` para configuración clave-valor.
+**Código muerto:** `src/auth/wordpress-auth.{service,guard}.ts` y `wp-user.decorator.ts` (auth por cookies de WordPress contra `clubdetenisgraneros.cl/wp-json/ctg/v1/me`) no están registrados en ningún módulo ni usados por ningún controller. No basarse en ellos.
+
+### Logging
+
+- `AppLogger` (`common/app.logger.ts`, global vía `CommonModule`): registra eventos de negocio (logins, desafíos, reservas, cambios de ranking) con formato emoji + pipe.
+- `ChileLogger` (`common/chile-logger.ts`): extiende `ConsoleLogger` de Nest para timestamps en hora Chile; se pasa en `NestFactory.create` en `main.ts`.
 
 ---
 
-## API Endpoints
+## Fechas y Timezone (America/Santiago)
 
-### Auth (`/auth`)
-- `POST /auth/register` — `{username, email, password, name, phone?}` → `{token, user, player}`
-- `POST /auth/login` — `{username, password}` → `{token, user, player}`
-- `GET /auth/me` — Bearer token → `{user, player}`
-- `POST /auth/forgot-password` — `{email}` → envía email con token de reset
-- `POST /auth/reset-password` — `{token, newPassword}` → actualiza password
+**Toda la lógica de fechas está centralizada en `src/common/dates.ts`** (con tests en `dates.spec.ts`). No reimplementar parsing de fechas inline; importar de ahí:
 
-### Players (`/players`)
-- `GET /players` — Todos los jugadores ordenados por posición (incluye desafíos activos)
-- `GET /players/:id` — Detalle con últimos 10 desafíos e historial de ranking
-- `GET /players/user/:userId` — Buscar por user ID
-- `GET /players/:id/available-challenges` — Jugadores que puede desafiar
-- `PUT /players/me` — Actualizar nombre/teléfono del propio perfil
-- `POST /players/me/avatar` — `{image: base64}` subir/reemplazar avatar (Cloudinary)
-- `DELETE /players/me/avatar` — Eliminar avatar propio
+| Función | Uso |
+|---------|-----|
+| `nowInChile()` | Hora Chile como Date "naive" (reloj chileno almacenado como si fuera UTC). Solo para comparar con otros valores naive (ej: `date` + `time_slot` de reservas). **No** pasarla a `toChileDateStr()`. |
+| `toChileDateStr(date)` | Timestamp UTC real → `YYYY-MM-DD` en Chile (usa locale `en-CA`). **No** usar con fechas naive. |
+| `currentChileDate()` | Hoy en Chile como `YYYY-MM-DD`. |
+| `chileWeekBoundsFromStr(str)` | Rango lunes-domingo a partir de un `YYYY-MM-DD`. Base del cupo semanal de alta demanda. |
+| `monthBoundsUTC(year, month0)` | Inicio/fin de mes en UTC puro para queries sobre campos `@db.Date`. |
 
-### Admin Players (`/admin/players`)
-- `POST /admin/players` — Crear jugador manualmente
-- `PUT /admin/players/:id` — Actualizar datos
-- `DELETE /admin/players/:id` — Eliminar jugador y usuario
-- `POST /admin/players/:id/move` — `{newPosition}` mover posición (cascada)
-- `POST /admin/players/:id/reset-immunity` — Quitar inmunidad
-- `POST /admin/players/:id/reset-vulnerability` — Quitar vulnerabilidad
-- `GET /admin/players/:id/weekly-usage` — Uso semanal de slots de alta demanda
-
-### Challenges (`/challenges`)
-- `POST /challenges` — `{challenger_id, challenged_id}` crear desafío
-- `GET /challenges` — Listar todos
-- `GET /challenges/:id` — Detalle
-- `POST /challenges/:id/accept` — `{player_id}` aceptar
-- `POST /challenges/:id/reject` — `{player_id}` rechazar (W.O. automático)
-- `POST /challenges/:id/result` — `{player_id, winner_id, score}` enviar resultado
-- `POST /challenges/:id/schedule` — `{date}` programar fecha de partido
-
-### Admin Challenges (`/admin/challenges`)
-- `POST /admin/challenges/:id/resolve` — `{winnerId, score}` resolver disputa
-- `DELETE /admin/challenges/:id` — Cancelar desafío
-- `DELETE /admin/challenges/:id/force` — Forzar eliminación sin efectos secundarios
-- `POST /admin/challenges/:id/extend` — `{hours, type: 'accept'|'play'}` extender plazo
-
-### Master (`/master`)
-- `GET /master` — Todas las temporadas
-- `GET /master/:category` — Temporada por categoría
-- `POST /master/generate` — Generar grupos y partidos de temporada
-- `PATCH /master/matches/:id/schedule` — Programar fecha de partido
-- `POST /master/matches/:id/player-result` — `{playerId, winnerId, score}` resultado del jugador
-- `POST /master/matches/:id/result` — `{winnerId, score}` resultado oficial (admin)
-- `POST /master/:seasonId/check-final` — Verificar y generar final si corresponde
-
-### Reservations (`/reservations`)
-- `GET /reservations` — Listar reservas (admin)
-- `GET /reservations/my` — Mis reservas
-- `GET /reservations/player/:playerId` — Reservas de un jugador
-- `GET /reservations/courts` — Lista de canchas activas
-- `GET /reservations/blocks` — Bloques de canchas
-- `GET /reservations/availability` — `?date&courtId` disponibilidad de canchas
-- `GET /reservations/season` — Configuración de temporada de reservas
-- `GET /reservations/stats` — Estadísticas de reservas
-- `POST /reservations` — Crear reserva
-- `PATCH /reservations/:id` — Actualizar reserva
-- `DELETE /reservations/:id` — Cancelar reserva
-
-### Cron (`/cron`)
-- `POST /cron/run` — Ejecutar manualmente el cron de expiración
-
-### Test (`/test`)
-- `POST /test/whatsapp` — `{phone, message}` probar WhatsApp (solo desarrollo)
-- `GET /test/grupos` — Listar grupos de WhatsApp
-- `POST /test/grupo` — Enviar mensaje a grupo de WhatsApp
+Conceptos clave:
+- Los campos `@db.Date` de Prisma (ej: `Reservation.date`) se almacenan como **UTC midnight**. Para comparar contra "ahora", se reconstruye un Date naive (`date.toISOString().split('T')[0]` + `T${time_slot}:00`) y se compara con `nowInChile()`.
+- Mezclar fechas naive con UTC reales es el bug clásico de este repo — leer los docstrings de `dates.ts` antes de tocar fechas.
+- El servidor (Railway/Docker) corre en UTC; Chile es UTC-3/UTC-4 según horario de verano.
 
 ---
 
-## Reglas de Negocio (Escalerilla)
+## Invariantes Críticos
 
-### Sistema de Niveles
-13 niveles. Nivel 1 = posición 1, Nivel 13 = posiciones 44-48. Definido en `challenge-rules.service.ts`.
+### Posiciones en la Escalerilla
 
-### Quién puede desafiar a quién
-- **Mismo nivel:** Solo a jugadores con posición más alta (número menor)
-- **Distinto nivel:** Solo puede desafiar 1 nivel hacia arriba
-- **No puede desafiar si:** tiene desafío activo (pending/accepted), está inmune, está vulnerable, o tiene deuda (`has_debt`)
+- `position = null` → jugador fuera de la escalerilla (sin ranking activo)
+- `position = 0` → admins (excluidos de la lista pública vía filtro `is_admin` en `players.service.ts`)
+- Posiciones son enteros únicos ≥ 1 para jugadores activos (unicidad por convención, **no** hay unique constraint en el schema)
+- **Posición temporal 9999**: pivot al mover jugadores. El orden de updates importa (siempre descendente primero).
 
-### Flujo de un desafío
-1. Crear desafío → 24hrs para aceptar, 5 días para jugar
-2. Si **acepta** → status `accepted`, pueden programar fecha (`/schedule`)
-3. Si **rechaza** → challenger gana por W.O., intercambio de posiciones
-4. Si **no responde en 24hrs** → cron expira, challenger gana por W.O.
-5. Ambos envían resultado → si coinciden, se procesa automáticamente
-6. Si no coinciden → status `disputed`, requiere resolución admin
-7. Si solo uno envía resultado → después de 24hrs se auto-valida
+### Algoritmo de Corrimiento (`challenge-rules.service.ts` → `processWin`)
 
-### Movimiento de posiciones
-- Ganador toma la posición del perdedor
-- Todos los jugadores entre ambos bajan 1 posición (cascada)
-- Se usa posición temporal 9999 para evitar conflictos de unicidad
-- Cambios registrados en `ranking_history`
+1. Si el ganador ya está adelante del perdedor → no hay cambios
+2. Guardar `RankingHistory` de todos los afectados ANTES de mover
+3. Mover ganador a posición 9999 (temporal)
+4. Bajar afectados 1 posición (en orden descendente para evitar colisiones)
+5. Colocar ganador en la posición del perdedor
 
-### Inmunidad y Vulnerabilidad
-- **Ganador** (excepto posición #1): inmune 24 horas
-- **Perdedor**: vulnerable hasta medianoche (no puede crear desafíos, sí recibirlos)
+No usa transacción Prisma — opera en secuencia para evitar deadlocks.
 
----
+### Transiciones de Estado Atómicas
 
-## Cron Jobs
+Para transiciones de estado con riesgo de doble procesamiento (doble click, colisión con cron), usar el patrón claim con `updateMany` condicionado:
 
-`ChallengesCronService` con tres jobs:
+```ts
+const claimed = await this.prisma.challenge.updateMany({
+  where: { id, status: 'pending' },
+  data:  { status: 'rejected', resolved_at: new Date() },
+});
+if (claimed.count === 0) throw new BadRequestException('Ya no está pendiente');
+```
 
-| Job | Frecuencia | Acción |
-|-----|-----------|--------|
-| `handleExpiredChallenges` | Cada 6 horas | Expira no aceptados (W.O.), penaliza no jugados, auto-valida resultado único |
-| `handleExpiredReservations` | Cada hora | Cancela reservas expiradas |
-| `handleWeeklyHighDemandReset` | Lunes a medianoche | Resetea contadores de slots de alta demanda |
+Implementado en `ChallengesService.reject`; aplicar el mismo patrón si se tocan otras transiciones.
 
 ---
 
-## Notificaciones
+## Reglas de Negocio: Escalerilla
 
-### Email (Resend.com)
-- Desde: `escalerilla@clubdetenisgraneros.cl`
-- Eventos: desafío creado, aceptado, rechazado, resultado confirmado
+### Sistema de Niveles (13 niveles, `getLevel` en challenge-rules.service.ts)
 
-### WhatsApp (whatsapp-web.js)
-- Requiere Chromium (instalado en Docker)
-- Sesión persistida en `.wwebjs_auth/` (ignorada en git)
-- Formato números: `56XXXXXXXXX@c.us`
-- Controlado por `WHATSAPP_ENABLED` env var
-- QR Code en primera autenticación
+```
+Nivel 1: pos 1          Nivel 6: pos 16-19      Nivel 11: pos 37-39
+Nivel 2: pos 2-4        Nivel 7: pos 20-24      Nivel 12: pos 40-43
+Nivel 3: pos 5-8        Nivel 8: pos 25-27      Nivel 13: pos 44-48
+Nivel 4: pos 9-12       Nivel 9: pos 28-31
+Nivel 5: pos 13-15      Nivel 10: pos 32-36
+```
+
+Un jugador puede desafiar: **su mismo nivel** (solo a quien esté adelante) O **1 nivel arriba**. Además: ninguno de los dos puede estar "ocupado" (desafío pending/accepted), el desafiado no puede estar inmune, el desafiante no puede estar vulnerable.
+
+### Estados de un Desafío
+
+```
+pending → accepted → completed
+                  → disputed (resultados no coinciden, admin resuelve)
+pending → rejected (challenger gana W.O.)
+pending → expired_not_accepted (cron, 24h sin respuesta, challenger gana W.O.)
+accepted → expired_not_played (cron, 5 días sin jugar, se penaliza al challenger)
+(admin) → cancelled
+```
+
+Plazos: `accept_deadline` = creación + 24h; `play_deadline` = creación + 5 días.
+
+### Doble Confirmación de Resultados
+
+- Si un jugador envía resultado y el otro no en **4 horas** (`HOURS_TO_CONFIRM_RESULT` en el cron), se auto-valida el existente (referencia: `first_result_at ?? accepted_at`, marca `results_match: false`).
+- Ambos coinciden → procesa automáticamente (`results_match: true`).
+- Difieren → `disputed`, requiere admin (`POST /admin/challenges/:id/resolve`).
+
+### Penalización por No Jugar (`expired_not_played`)
+
+Solo se penaliza al **challenger** (baja 1 posición; el de abajo sube 1). No es W.O.
+
+### Post-Partido
+
+- Ganador: inmune 24h (excepto si queda en posición #1)
+- Perdedor: vulnerable 24h — puede **recibir** desafíos pero no **crear**
+
+### Fijar Fecha de Desafío (`scheduleMatch`)
+
+Crea una **reserva automática** (`is_challenge: true`, `challenge_id`) que: valida cancha/slot libre, valida que el jugador no tenga otra reserva activa (el filtro usa `OR` explícito porque `NOT` sobre campo nullable excluye `NULL` en SQL — ver comentario en código), descuenta cupo de alta demanda, y cancela la reserva anterior del mismo desafío al reprogramar. Al completarse el partido o cancelar la reserva, se libera/desvincula (`scheduled_date: null`).
+
+---
+
+## Reglas de Negocio: Reservas
+
+### Horarios
+
+Slots del día (90 min c/u): `06:00, 07:45, 09:30, 11:15, 13:00, 14:45, 16:30, 18:15, 20:00, 21:45`. El cron completa reservas 90 minutos después del inicio.
+
+### Slots de Alta Demanda — definidos en DOS lugares (mantener sincronizados)
+
+- `src/challenges/challenges.service.ts` → constante `HIGH_DEMAND`
+- `src/reservations/reservations.service.ts` → constante `HIGH_DEMAND_SLOTS`
+
+```ts
+{ verano: ['07:45', '09:30', '18:15', '20:00'],
+  invierno: ['09:30', '11:15', '16:30', '18:15'] }
+```
+
+La temporada activa se lee de `SystemConfig` key `"season"` (`"verano"` | `"invierno"`, default `"verano"`).
+
+### Límites por tipo de socio (`member_type`)
+
+| Tipo | Alta demanda/semana | Reservas activas | Otras reglas |
+|------|--------------------|------------------|--------------|
+| `socio` | 2 + nº hijos + `extra_high_demand_slots` (cupo familiar) | 1 | puede traer visita ($3.000 default `guest_fee`) |
+| `hijo_socio` | 1 (contador individual, además del familiar) | 1 | |
+| `profe` | sin límite | sin límite | usa `school_name` (de `Player.school_names`), sin visita, sin notificación WhatsApp |
+
+- `has_debt: true` → no puede crear reservas.
+- **Cancelación tardía** (< 4.5 horas = 3 turnos antes): se permite, pero el turno cuenta como usado. Se detecta por el string exacto `cancel_reason = 'Cancelación tardía - turno descontado'` (las queries de cupo filtran por ese literal — no cambiarlo).
+- **Semana = lunes-domingo Chile** (`chileWeekBoundsFromStr`). El reset del lunes no actualiza nada en DB: el límite se recalcula dinámicamente contra el rango de la semana.
+- **Modificar reserva** (`PATCH /reservations/:id/modify`): cancela la antigua (`cancel_reason: 'Modificada por jugador'`, no cuenta como tardía), crea la nueva, y si falla **restaura la antigua** (rollback manual).
+
+### Bloqueos y Cobro de Luz
+
+- `CourtBlock`: bloqueos admin por cancha/fecha; `time_slot = null` bloquea el día completo.
+- `LightChargeConfig`: por fecha, define slots con cobro de luz y monto (`amount_per_slot`, default $3.000). `GET /reservations/light-summary?month=YYYY-MM` calcula recaudación (excluye desafíos).
+
+---
+
+## Reglas de Negocio: Torneo Master
+
+Categorías A/B/C/D = rangos de posición [1-12, 13-24, 25-36, 37-48]. Toma los 8 primeros del rango (falla si hay menos). Distribución serpentina:
+- Grupo A: jugadores 1°, 4°, 5°, 8° del rango
+- Grupo B: jugadores 2°, 3°, 6°, 7° del rango
+
+Flujo automático: round robin → semifinales (al completar todos los partidos de grupo; cruces 1A-2B / 1B-2A) → final (al completar ambas semis). Estados de season: `pending → active → semifinals → final → completed`.
+
+> ⚠️ **Bug latente:** `MasterService.submitPlayerResult` escribe `player1_result`/`player2_result` con `as any`, pero esos campos **no existen** ni en `schema.prisma`, ni en migraciones, ni en el Prisma Client generado. La doble confirmación de resultados del Master lanzaría `PrismaClientValidationError` en runtime. El flujo admin (`POST /master/matches/:id/result`) sí funciona. Si se toca el Master, resolver esto primero (agregar los campos al schema o eliminar el flujo).
+
+---
+
+## Schema y Migraciones (DRIFT — leer antes de tocar Prisma)
+
+**Las migraciones en `prisma/migrations/` NO reflejan el schema actual.** Columnas y tablas presentes en `schema.prisma` (y en la DB de Supabase) que no aparecen en ninguna migración: `court_blocks` (tabla completa), `Player.extra_high_demand_slots`, `Player.school_names`, `Reservation.partner_name`, `Reservation.is_challenge`, `Reservation.challenge_id`, `Reservation.school_name`, entre otras. Fueron aplicadas con `prisma db push` o SQL manual.
+
+Consecuencias prácticas:
+- `npx prisma migrate dev` detectará drift y puede proponer **resetear la DB** — no aceptar a ciegas.
+- Una DB creada desde cero con `migrate deploy` **no** coincidirá con el schema; usar `prisma db push` o el snapshot del schema.
+- El Docker CMD ejecuta `migrate deploy` al iniciar: contra la DB existente es no-op de migraciones viejas, no "arregla" el drift.
+- `schema.prisma.backup` en `prisma/` es un respaldo manual, ignorarlo.
+
+### Modelos con `prisma as any`
+
+- `(this.prisma as any).courtBlock` en `reservations.service.ts` — el tipo se regenera con `npx prisma generate` y el cast se podría eliminar.
+- `(this.prisma as any).reservation` en `challenges.service.ts` — por campos añadidos post-tipos (`is_challenge`, `challenge_id`, `partner_name`).
+- `lightChargeConfig` ya se usa tipado (sin cast).
+- **El `build` ignora errores TS** (`--noEmitOnError false`) precisamente por estos casts. No agregar más `as any` sin justificación.
 
 ---
 
@@ -303,61 +285,76 @@ Tablas del sistema de reservas de canchas. `Court` → `Reservation` (con franja
 
 | Variable | Descripción |
 |----------|-------------|
-| `DATABASE_URL` | Connection string PostgreSQL (Supabase pooler) |
-| `JWT_SECRET` | Secreto para firmar tokens JWT (7 días expiración) |
-| `RESEND_API_KEY` | API key de Resend.com para emails |
-| `FRONTEND_URL` | URL del frontend (CORS) |
-| `WORDPRESS_URL` | URL de WordPress del club |
-| `WHATSAPP_ENABLED` | `true` para activar bot WhatsApp |
-| `CLOUDINARY_CLOUD_NAME` | Cloud name de Cloudinary |
-| `CLOUDINARY_API_KEY` | API key de Cloudinary |
-| `CLOUDINARY_API_SECRET` | API secret de Cloudinary |
-| `PORT` | Puerto del servidor (default: 3000) |
+| `DATABASE_URL` | Connection string del pooler de Supabase (pgBouncer) |
+| `DIRECT_URL` | Connection string directo de Supabase (requerido para migraciones) |
+| `JWT_SECRET` | Secreto JWT (7 días de expiración; tiene fallback inseguro hardcodeado en `auth.module.ts`) |
+| `RESEND_API_KEY` | API key de Resend.com (emails desde `escalerilla@clubdetenisgraneros.cl`) |
+| `FRONTEND_URL` | URL del frontend (CORS + links en notificaciones) |
+| `WHATSAPP_ENABLED` | `"true"` para activar WhatsApp (requiere Chromium) |
+| `WHATSAPP_GROUP_ID` | ID del grupo de WhatsApp (obtener via `GET /test/grupos`) |
+| `WHATSAPP_SESSION_PATH` | Path para la sesión (default: `.wwebjs_auth`) |
+| `PUPPETEER_EXECUTABLE_PATH` | Path a Chromium (en Docker: `/usr/bin/chromium`) |
+| `WORDPRESS_URL` | Solo usado por el código muerto de auth WordPress |
+| `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary |
+| `PORT` | Puerto (default: 3000) |
 
 ---
 
-## Autenticación
+## Despliegue
 
-- **JWT** con HS256, expiración 7 días
-- **Payload:** `{sub: userId, is_admin: boolean}`
-- **Header:** `Authorization: Bearer <token>`
-- **Passwords:** bcryptjs con 10 salt rounds
-- **WordPress Auth Guard:** implementado en `wordpress-auth.guard.ts` pero no activo en ninguna ruta
+Hay **dos configuraciones de build conviviendo** (verificar en Railway cuál está activa antes de tocar):
+- `Dockerfile`: `node:20-slim` + Chromium via apt. CMD: `npx prisma migrate deploy && node dist/main.js`. Es la referencia más reciente (commits "fix: dockerfile limpio").
+- `railway.json` + `nixpacks.toml` + `Procfile`: builder NIXPACKS con `npm run start:prod` (nixpacks aún declara `nodejs_18`, sin Chromium → sin WhatsApp).
+
+**Supabase**: `DATABASE_URL` (pooler) + `DIRECT_URL` (directa, para migraciones).
+
+**CORS** (`main.ts`): permite `localhost:3000/3001`, `reservas.` y `escalerilla.clubdetenisgraneros.cl`, `FRONTEND_URL`, requests sin origin, y cualquier `*.vercel.app` (previews).
 
 ---
 
-## Docker y Despliegue
+## Cron Jobs (`cron/challenges-cron.service.ts`)
 
-- **Dockerfile:** Multi-stage build con `node:20-slim` + Chromium
-- **CMD:** `npx prisma migrate deploy && node dist/main.js`
-- **CORS:** `localhost:3001`, `escalerilla.clubdetenisgraneros.cl`, `FRONTEND_URL`
-- **Plataforma:** Railway
-- **nixpacks.toml:** Configuración alternativa para Nixpacks (Railway)
-- **Procfile:** Definición de proceso web
+| Job | Schedule | Qué hace |
+|-----|----------|----------|
+| `handleExpiredChallenges` | `0 0,6,12,18 * * *` | Expira no aceptados (W.O.), penaliza no jugados, auto-valida resultado único (4h) |
+| `handleExpiredReservations` | `0 * * * *` | Marca como `completed` reservas cuyo fin (inicio + 90 min) ya pasó en hora Chile |
+| `handleWeeklyHighDemandReset` | `0 0 * * 1` | Solo loguea el reset (el reset es implícito por el rango de fechas de la query) |
+
+Trigger manual: `POST /cron/run` (ejecuta los dos primeros).
+
+---
+
+## Notificaciones
+
+**WhatsApp** (whatsapp-web.js + Puppeteer):
+- Formato de números chilenos: `569XXXXXXXX@c.us` (el servicio agrega `56` automáticamente)
+- Nunca bloquean el flujo principal — siempre en `try/catch`; si falla, se loguea el mensaje por consola
+- `sendGroupMessage(groupId, msg)` → grupo del club; `sleep(500-600ms)` entre mensajes para evitar ban
+- Al iniciar limpia locks de Chromium (`SingletonLock`, etc.) de la sesión
+
+**Email** (Resend): solo para notificaciones de desafío creado/aceptado; el reset de contraseña va por WhatsApp.
+
+---
+
+## Avatares (Cloudinary)
+
+- Carpeta `ctg-avatars/`, public ID `player-{playerId}` (overwrite al subir)
+- Transformación: 400x400, crop face, quality auto. Input: base64 (límite 10MB en bodyParser, configurado en `main.ts`)
 
 ---
 
 ## Seed
 
-`prisma/seed.ts` crea un usuario admin por defecto:
-- Username: `admin` / Password: `admin123`
-- Player en posición `null` (fuera de la escalerilla)
+`npx prisma db seed` crea usuario `admin` / `admin123` / `admin@ctg.cl` con `is_admin: true` y player con `position = 0` (excluido de la lista pública). Falla si ya existe (no es idempotente).
 
 ---
 
-## Scripts de Utilidad (`scripts/`)
+## Gotchas Importantes
 
-Scripts TypeScript de un solo uso. Ejecutar con:
-```bash
-npx ts-node scripts/<nombre>.ts
-```
-
-| Script | Propósito |
-|--------|-----------|
-| `add-phones.ts` | Agregar teléfonos a jugadores existentes |
-| `change-admin-password.ts` | Cambiar password del admin |
-| `load-players.ts` | Carga masiva de jugadores |
-| `fix-phone-numbers.ts` | Normalizar formato de teléfonos |
-| `update-positions-*.ts` | Scripts de migración de posiciones |
-| `export-current-positions.ts` | Exportar posiciones actuales |
-| `current-positions.ts` | Snapshot de posiciones |
+- **`ChallengeRulesService`** se provee en `ChallengesModule` Y en `PlayersModule` (instanciado en ambos para evitar circular deps).
+- **`admin-challenges.service.ts`** y **`admin-players.service.ts` (`movePlayer`)** usan su propia lógica de movimiento de posiciones con `updateMany` increment/decrement (no delegan a `ChallengeRulesService`) — verificar consistencia al modificar.
+- **`cancelChallenge` admin** revierte wins/losses pero **NO revierte** cambios de ranking (documentado en su respuesta).
+- **`getWeeklyHighDemandUsage`** en admin-players usa cálculo de semana propio en hora del servidor y **no cuenta cancelaciones tardías** — inconsistente con `checkHighDemandLimit` de reservations (que sí las cuenta y usa semana Chile).
+- **Posición al registrar**: `AuthService.register` asigna `lastPlayer.position + 1` automáticamente. `AdminPlayersService.createPlayer` deja `position = null` si no se especifica.
+- **Master**: doble confirmación rota por campos inexistentes (ver sección Master).
+- Existe un directorio basura `node_modules 2/` en la raíz (no versionado).
