@@ -17,7 +17,7 @@ import { CommonModule } from './common/common.module';
       isGlobal: true,
       envFilePath: process.env.NODE_ENV === 'production'
         ? '.env.production'
-        : '.env.development',
+        : '.env.dev',
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
