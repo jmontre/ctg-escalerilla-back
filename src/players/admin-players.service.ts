@@ -1,6 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppLogger } from '../common/app.logger';
+import { chileWeekBoundsFromStr, currentChileDate } from '../common/dates';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -208,16 +209,12 @@ export class AdminPlayersService {
   }
 
   /**
-   * Obtener cupos de alta demanda usados esta semana por un jugador
+   * Cupos de alta demanda usados esta semana — misma lógica que el cobro real
+   * (ReservationsService.checkHighDemandLimit): semana Chile, cancelaciones
+   * tardías cuentan, extra_high_demand_slots amplía el límite.
    */
   async getWeeklyHighDemandUsage(playerId: string) {
-    const today = new Date();
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-    weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
+    const { weekStart, weekEnd } = chileWeekBoundsFromStr(currentChileDate());
 
     const player = await this.prisma.player.findUnique({
       where: { id: playerId },
@@ -225,20 +222,24 @@ export class AdminPlayersService {
     });
     if (!player) throw new NotFoundException('Jugador no encontrado');
 
-    const playerIds = [playerId, ...(player.children?.map((c: any) => c.id) || [])];
+    const playerIds = [playerId, ...(player.children?.map(c => c.id) || [])];
 
     const used = await this.prisma.reservation.count({
       where: {
         player_id:      { in: playerIds },
         is_high_demand: true,
-        status:         'active',
         date:           { gte: weekStart, lte: weekEnd },
+        OR: [
+          { status: 'active' },
+          { status: 'cancelled', cancel_reason: 'Cancelación tardía - turno descontado' },
+        ],
       }
     });
 
+    const extraSlots = player.extra_high_demand_slots ?? 0;
     const limit = player.member_type === 'hijo_socio'
       ? 1
-      : 2 + (player.children?.length || 0);
+      : 2 + (player.children?.length || 0) + extraSlots;
 
     return {
       player_id:   playerId,
