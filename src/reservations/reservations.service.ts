@@ -476,22 +476,28 @@ export class ReservationsService {
         // Alta demanda: solo aplica a socios normales. Profes sin límite.
         if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, data.date);
 
-        const reservation = await this.prisma.reservation.create({
-            data: {
-                player_id:      player.id,
-                court_id:       data.court_id,
-                date:           reservationDate,
-                time_slot:      data.time_slot,
-                is_high_demand: isHighDemand,
-                has_guest:      isProfe ? false : (data.has_guest || false),
-                guest_name:     isProfe ? null  : (data.guest_name || null),
-                guest_fee:      isProfe ? 0     : (data.has_guest ? 3000 : 0),
-                partner_name:   isProfe ? null  : (data.partner_name || null),
-                school_name:    isProfe ? (data.school_name || null) : null,
-                status:         'active',
-            },
-            include: { court: true }
-        });
+        let reservation;
+        try {
+            reservation = await this.prisma.reservation.create({
+                data: {
+                    player_id:      player.id,
+                    court_id:       data.court_id,
+                    date:           reservationDate,
+                    time_slot:      data.time_slot,
+                    is_high_demand: isHighDemand,
+                    has_guest:      isProfe ? false : (data.has_guest || false),
+                    guest_name:     isProfe ? null  : (data.guest_name || null),
+                    guest_fee:      isProfe ? 0     : (data.has_guest ? 3000 : 0),
+                    partner_name:   isProfe ? null  : (data.partner_name || null),
+                    school_name:    isProfe ? (data.school_name || null) : null,
+                    status:         'active',
+                },
+                include: { court: true }
+            });
+        } catch (e: any) {
+            if (e?.code === 'P2002') throw new BadRequestException('Este turno ya está reservado en esa cancha.');
+            throw e;
+        }
 
         // Notificación solo para socios normales (no profes)
         if (!isProfe) {
@@ -628,61 +634,59 @@ export class ReservationsService {
         });
         if (existing) throw new BadRequestException('Este turno ya está reservado en esa cancha.');
 
-        // Verificar límite alta demanda: cancelamos la reserva anterior ANTES de verificar
-        // para que no cuente como ocupada (la modificación no es cancelación tardía)
-        await this.prisma.reservation.update({
-            where: { id: reservationId },
-            data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Modificada por jugador' }
-        });
+        // Validar cupo ANTES de tocar nada, excluyendo la reserva que se modifica
+        if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, data.date, reservationId);
+
+        let newReservation;
+        try {
+            const [, created] = await this.prisma.$transaction([
+                this.prisma.reservation.update({
+                    where: { id: reservationId },
+                    data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Modificada por jugador' }
+                }),
+                this.prisma.reservation.create({
+                    data: {
+                        player_id:      player.id,
+                        court_id:       data.court_id,
+                        date:           reservationDate,
+                        time_slot:      data.time_slot,
+                        is_high_demand: isHighDemand,
+                        has_guest:      isProfe ? false : (data.has_guest || false),
+                        guest_name:     isProfe ? null  : (data.guest_name || null),
+                        guest_fee:      isProfe ? 0     : (data.has_guest ? 3000 : 0),
+                        partner_name:   isProfe ? null  : (data.partner_name || null),
+                        status:         'active',
+                    },
+                    include: { court: true }
+                }),
+            ]);
+            newReservation = created;
+        } catch (e: any) {
+            if (e?.code === 'P2002') throw new BadRequestException('Este turno ya está reservado en esa cancha.');
+            throw e;
+        }
 
         try {
-            if (isHighDemand && !isProfe) await this.checkHighDemandLimit(player, data.date);
-
-            const newReservation = await this.prisma.reservation.create({
-                data: {
-                    player_id:      player.id,
-                    court_id:       data.court_id,
-                    date:           reservationDate,
-                    time_slot:      data.time_slot,
-                    is_high_demand: isHighDemand,
-                    has_guest:      isProfe ? false : (data.has_guest || false),
-                    guest_name:     isProfe ? null  : (data.guest_name || null),
-                    guest_fee:      isProfe ? 0     : (data.has_guest ? 3000 : 0),
-                    partner_name:   isProfe ? null  : (data.partner_name || null),
-                    status:         'active',
-                },
-                include: { court: true }
-            });
-
-            try {
-                if (player.phone) {
-                    const fechaFormateada = formatReservationDate(reservationDate);
-                    await whatsappService.sendMessage(
-                        player.phone,
-                        `📅 *Club de Tenis Graneros*\n\n` +
-                        `✏️ Tu reserva fue modificada\n\n` +
-                        `🎾 ${court.name}\n` +
-                        `📆 ${fechaFormateada}\n` +
-                        `🕐 ${data.time_slot} hrs` +
-                        (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
-                        (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
-                        (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
-                    );
-                }
-            } catch (e) {
-                console.log(`📱 [LOG WSP → ${player.phone}] Reserva modificada`);
+            if (player.phone) {
+                const fechaFormateada = formatReservationDate(reservationDate);
+                await whatsappService.sendMessage(
+                    player.phone,
+                    `📅 *Club de Tenis Graneros*\n\n` +
+                    `✏️ Tu reserva fue modificada\n\n` +
+                    `🎾 ${court.name}\n` +
+                    `📆 ${fechaFormateada}\n` +
+                    `🕐 ${data.time_slot} hrs` +
+                    (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
+                    (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
+                    (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
+                );
             }
-
-            this.appLogger.reservationCreated(player.name, court.name, data.date, data.time_slot, isHighDemand, data.partner_name);
-            return { message: 'Reserva modificada correctamente.', reservation: newReservation };
-        } catch (err) {
-            // Si falla la creación de la nueva, restaurar la antigua
-            await this.prisma.reservation.update({
-                where: { id: reservationId },
-                data:  { status: 'active', cancelled_at: null, cancel_reason: null }
-            });
-            throw err;
+        } catch (e) {
+            console.log(`📱 [LOG WSP → ${player.phone}] Reserva modificada`);
         }
+
+        this.appLogger.reservationCreated(player.name, court.name, data.date, data.time_slot, isHighDemand, data.partner_name);
+        return { message: 'Reserva modificada correctamente.', reservation: newReservation };
     }
 
     async adminCancel(reservationId: string, reason?: string) {
@@ -770,7 +774,7 @@ export class ReservationsService {
         };
     }
 
-    private async checkHighDemandLimit(player: any, dateStr: string) {
+    private async checkHighDemandLimit(player: any, dateStr: string, excludeReservationId?: string) {
         const { weekStart, weekEnd } = chileWeekBoundsFromStr(dateStr);
         const playerIds = [player.id, ...(player.children?.map((c: any) => c.id) || [])];
 
@@ -780,6 +784,7 @@ export class ReservationsService {
                 player_id:      { in: playerIds },
                 is_high_demand: true,
                 date:           { gte: weekStart, lte: weekEnd },
+                ...(excludeReservationId ? { id: { not: excludeReservationId } } : {}),
                 OR: [
                     { status: 'active' },
                     { status: 'cancelled', cancel_reason: 'Cancelación tardía - turno descontado' },
@@ -798,6 +803,7 @@ export class ReservationsService {
                     player_id:      player.id,
                     is_high_demand: true,
                     date:           { gte: weekStart, lte: weekEnd },
+                    ...(excludeReservationId ? { id: { not: excludeReservationId } } : {}),
                     OR: [
                         { status: 'active' },
                         { status: 'cancelled', cancel_reason: 'Cancelación tardía - turno descontado' },

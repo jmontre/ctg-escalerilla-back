@@ -239,49 +239,37 @@ export class ChallengeRulesService {
 
     console.log(`📍 Jugadores afectados: ${affectedPlayers.length}`);
 
-    // Guardar historial ANTES de hacer cambios
-    for (const player of affectedPlayers) {
-      await this.prisma.rankingHistory.create({
+    // Historial + corrimiento en UNA transacción (orden descendente: el
+    // pivot 9999 libera la posición del ganador y cada update entra a un
+    // hueco recién liberado).
+    await this.prisma.$transaction([
+      ...affectedPlayers.map(player =>
+        this.prisma.rankingHistory.create({
+          data: {
+            player_id:    player.id,
+            old_position: player.position,
+            position:     player.position + 1,
+            reason:       'challenge_lost',
+          },
+        }),
+      ),
+      this.prisma.rankingHistory.create({
         data: {
-          player_id: player.id,
-          old_position: player.position,
-          position: player.position + 1,
-          reason: 'challenge_lost',
-        }
-      });
-    }
-
-    await this.prisma.rankingHistory.create({
-      data: {
-        player_id: winner.id,
-        old_position: oldWinnerPosition,
-        position: targetPosition,
-        reason: 'challenge_won',
-      }
-    });
-
-    // Ejecutar cambios SIN transacción para evitar conflictos
-    // Movemos en orden descendente para no pisar posiciones
-
-    // 1. Mover ganador a posición temporal muy alta
-    await this.prisma.player.update({
-      where: { id: winner.id },
-      data: { position: 9999 }
-    });
-
-    // 2. Bajar todos los afectados 1 posición (de atrás hacia adelante)
-    for (const player of affectedPlayers) {
-      await this.prisma.player.update({
-        where: { id: player.id },
-        data: { position: player.position + 1 }
-      });
-    }
-
-    // 3. Colocar ganador en su posición final
-    await this.prisma.player.update({
-      where: { id: winner.id },
-      data: { position: targetPosition }
-    });
+          player_id:    winner.id,
+          old_position: oldWinnerPosition,
+          position:     targetPosition,
+          reason:       'challenge_won',
+        },
+      }),
+      this.prisma.player.update({ where: { id: winner.id }, data: { position: 9999 } }),
+      ...affectedPlayers.map(player =>
+        this.prisma.player.update({
+          where: { id: player.id },
+          data:  { position: player.position + 1 },
+        }),
+      ),
+      this.prisma.player.update({ where: { id: winner.id }, data: { position: targetPosition } }),
+    ]);
 
     console.log(`✅ Corrimiento: ${winner.name} (${oldWinnerPosition} → ${targetPosition})`);
   }

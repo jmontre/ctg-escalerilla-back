@@ -249,30 +249,36 @@ export class ChallengesService {
         }
       }
 
-      // Cancelar reserva anterior de este desafío
-      await this.prisma.reservation.updateMany({
-        where: { challenge_id: challengeId, status: 'active' },
-        data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Fecha reprogramada' }
-      });
-
       // Nombre del rival para partner_name
       const other = challenge.challenger_id === playerId ? challenge.challenged : challenge.challenger;
 
-      // Crear nueva reserva
-      await this.prisma.reservation.create({
-        data: {
-          player_id:      playerId,
-          court_id:       courtId,
-          date:           dateChile,
-          time_slot:      slot,
-          is_high_demand: isHighDemand,
-          has_guest:      false,
-          partner_name:   other.name,
-          is_challenge:   true,
-          challenge_id:   challengeId,
-          status:         'active',
-        }
-      });
+      // Cancelar reserva anterior de este desafío + crear la nueva, atómico.
+      try {
+        await this.prisma.$transaction([
+          this.prisma.reservation.updateMany({
+            where: { challenge_id: challengeId, status: 'active' },
+            data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Fecha reprogramada' }
+          }),
+          this.prisma.reservation.create({
+            data: {
+              player_id:      playerId,
+              court_id:       courtId,
+              date:           dateChile,
+              time_slot:      slot,
+              is_high_demand: isHighDemand,
+              has_guest:      false,
+              partner_name:   other.name,
+              is_challenge:   true,
+              challenge_id:   challengeId,
+              status:         'active',
+            }
+          }),
+        ]);
+      } catch (e: any) {
+        // Índice parcial reservations_active_slot_uniq: carrera perdida
+        if (e?.code === 'P2002') throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
+        throw e;
+      }
     }
 
     // ── Actualizar challenge ───────────────────────────────────────────────────

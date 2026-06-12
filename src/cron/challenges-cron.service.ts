@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
 import { whatsappService } from '../notifications/whatsapp.service';
@@ -242,23 +243,27 @@ export class ChallengesCronService {
       where: { position: challenger.position + 1 }
     });
 
-    await this.prisma.rankingHistory.create({
-      data: { player_id: challenger.id, old_position: challenger.position, position: challenger.position + 1, reason: 'penalty' }
-    });
+    const ops: Prisma.PrismaPromise<unknown>[] = [
+      this.prisma.rankingHistory.create({
+        data: { player_id: challenger.id, old_position: challenger.position, position: challenger.position + 1, reason: 'penalty' }
+      }),
+    ];
 
     if (playerBelow) {
-      await this.prisma.rankingHistory.create({
-        data: { player_id: playerBelow.id, old_position: playerBelow.position, position: playerBelow.position - 1, reason: 'opponent_penalty' }
-      });
+      ops.push(
+        this.prisma.rankingHistory.create({
+          data: { player_id: playerBelow.id, old_position: playerBelow.position, position: playerBelow.position - 1, reason: 'opponent_penalty' }
+        }),
+      );
     }
 
-    await this.prisma.player.update({ where: { id: challenger.id }, data: { position: 9999 } });
-
+    ops.push(this.prisma.player.update({ where: { id: challenger.id }, data: { position: 9999 } }));
     if (playerBelow) {
-      await this.prisma.player.update({ where: { id: playerBelow.id }, data: { position: challenger.position } });
+      ops.push(this.prisma.player.update({ where: { id: playerBelow.id }, data: { position: challenger.position } }));
     }
+    ops.push(this.prisma.player.update({ where: { id: challenger.id }, data: { position: challenger.position + 1 } }));
 
-    await this.prisma.player.update({ where: { id: challenger.id }, data: { position: challenger.position + 1 } });
+    await this.prisma.$transaction(ops);
 
     console.log(`✅ Penalización aplicada: ${challenger.name} baja 1 posición`);
   }
