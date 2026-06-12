@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, UnauthorizedException } from '@nestjs/common';
 import { MasterService } from './master.service';
 import { JwtService } from '@nestjs/jwt';
+import { Admin } from '../auth/admin.decorator';
 
 @Controller('master')
 export class MasterController {
@@ -27,6 +28,7 @@ export class MasterController {
     return this.masterService.findByCategory(category.toUpperCase());
   }
 
+  @Admin()
   @Post('generate')
   generate(@Body() body: {
     category: string; name: string;
@@ -67,6 +69,7 @@ export class MasterController {
    * POST /master/matches/:id/result
    * Ingresar resultado directo (admin)
    */
+  @Admin()
   @Post('matches/:id/result')
   submitResult(
     @Param('id') id: string,
@@ -75,11 +78,13 @@ export class MasterController {
     return this.masterService.submitResult(id, body.winner_id, body.score);
   }
 
+  @Admin()
   @Post(':seasonId/check-final')
   checkFinal(@Param('seasonId') seasonId: string) {
     return this.masterService.checkAndGenerateFinal(seasonId);
   }
 
+  @Admin()
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.masterService.deleteSeason(id);

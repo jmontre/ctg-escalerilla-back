@@ -1,6 +1,8 @@
 import { Controller, Post, Get, Body } from '@nestjs/common';
 import { whatsappService } from '../notifications/whatsapp.service';
+import { Admin } from '../auth/admin.decorator';
 
+@Admin()
 @Controller('test')
 export class TestController {
   @Post('whatsapp')

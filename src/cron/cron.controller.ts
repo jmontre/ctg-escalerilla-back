@@ -1,6 +1,8 @@
 import { Controller, Post } from '@nestjs/common';
 import { ChallengesCronService } from './challenges-cron.service';
+import { Admin } from '../auth/admin.decorator';
 
+@Admin()
 @Controller('cron')
 export class CronController {
   constructor(private cronService: ChallengesCronService) {}

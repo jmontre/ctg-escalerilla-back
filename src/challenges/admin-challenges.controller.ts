@@ -1,6 +1,8 @@
 import { Controller, Post, Delete, Body, Param } from '@nestjs/common';
 import { AdminChallengesService } from './admin-challenges.service';
+import { Admin } from '../auth/admin.decorator';
 
+@Admin()
 @Controller('admin/challenges')
 export class AdminChallengesController {
   constructor(private adminService: AdminChallengesService) {}
