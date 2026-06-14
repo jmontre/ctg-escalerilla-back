@@ -22,6 +22,11 @@ export class ChallengesService {
 
   private sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
+  /** Dispara notificaciones sin bloquear la respuesta HTTP. */
+  private notifyAsync(task: () => Promise<void>) {
+    void task().catch(e => console.error('⚠️ Error notificaciones (async):', e));
+  }
+
   async create(challengerId: string, challengedId: string) {
     const { challenger, challenged } = await this.rules.validateChallenge(challengerId, challengedId);
     const now = new Date();
@@ -32,10 +37,10 @@ export class ChallengesService {
         challenged: { select: { id: true, name: true, position: true, email: true, phone: true } }
       }
     });
-    try {
+    this.notifyAsync(async () => {
       if (challenged.phone) { await whatsappService.sendChallengeNotification(challenger.name, challenged.name, challenged.phone); await this.sleep(500); }
       await emailService.sendChallengeNotification(challenger.name, challenged.name, challenged.email);
-    } catch (e) { console.error('⚠️ Error notificaciones:', e); }
+    });
     this.appLogger.challengeCreated(challenger.name, challenged.name, challenger.position, challenged.position);
     return { message: 'Desafío creado exitosamente', challenge };
   }
@@ -75,10 +80,10 @@ export class ChallengesService {
     if (claimed.count === 0) throw new BadRequestException('Este desafío ya no está pendiente');
 
     const updated = { ...challenge, status: 'accepted' as const, accepted_at: new Date() };
-    try {
+    this.notifyAsync(async () => {
       if (updated.challenger.phone) { await whatsappService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.phone); await this.sleep(500); }
       await emailService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.email);
-    } catch (e) { console.error('⚠️ Error notificaciones aceptación:', e); }
+    });
     this.appLogger.challengeAccepted(updated.challenger.name, updated.challenged.name);
     return { message: 'Desafío aceptado exitosamente', challenge: updated };
   }
@@ -106,21 +111,18 @@ export class ChallengesService {
     await this.rules.applyPostMatchStatus(challenge.challenger_id, challenge.challenged_id);
     this.appLogger.challengeRejected(challenge.challenger.name, challenge.challenged.name);
 
-    try {
+    this.notifyAsync(async () => {
       if (challenge.challenger.phone) {
         await whatsappService.sendMessage(challenge.challenger.phone, `🎾 *Club de Tenis Graneros*\n\n${challenge.challenged.name} rechazó tu desafío.\n\n🏆 ¡Ganas por W.O. y subes en la escalerilla!`);
         await this.sleep(500);
       }
-    } catch (e) { console.error('⚠️ Error notificación personal:', e); }
-
-    try {
       const groupId = process.env.WHATSAPP_GROUP_ID;
       const winner = await this.prisma.player.findUnique({ where: { id: challenge.challenger_id } });
       const loser  = await this.prisma.player.findUnique({ where: { id: challenge.challenged_id } });
       if (groupId && winner && loser) {
         await whatsappService.sendGroupMessage(groupId, `🎾 *Escalerilla CTG — W.O.*\n\n🏆 *${winner.name}* gana por W.O.\n${loser.name} rechazó el desafío.\n\n📈 Nuevas posiciones:\n  • ${winner.name}: #${winner.position}\n  • ${loser.name}: #${loser.position}`);
       }
-    } catch (e) { console.error('⚠️ Error notificación WO grupo:', e); }
+    });
 
     return { message: 'Desafío rechazado. El desafiante gana por W.O.' };
   }
@@ -162,9 +164,9 @@ export class ChallengesService {
     if (!updated.challenger_result || !updated.challenged_result) {
       const other   = isChallenger ? updated.challenged : updated.challenger;
       const current = isChallenger ? updated.challenger : updated.challenged;
-      try {
+      this.notifyAsync(async () => {
         if (other.phone) await whatsappService.sendMessage(other.phone, `🎾 *Club de Tenis Graneros*\n\n${current.name} ya ingresó el resultado.\n\n¡No olvides ingresar el tuyo también!`);
-      } catch (e) { console.error('⚠️ Error notificación:', e); }
+      });
     }
 
     if (updated.challenger_result && updated.challenged_result) return this.processDoubleConfirmation(challengeId);
@@ -307,23 +309,20 @@ export class ChallengesService {
       if (court) courtName = ` · ${court.name}`;
     }
 
-    try {
+    this.notifyAsync(async () => {
       if (other.phone) {
         await whatsappService.sendMessage(other.phone,
           `🎾 *Club de Tenis Graneros*\n\n📅 *${setter.name}* fijó la fecha del partido:\n\n*${formattedDate}*${courtName}\n\nSi no puedes, coordina con tu rival.`
         );
         await this.sleep(500);
       }
-    } catch (e) { console.error('⚠️ Error notificación fecha:', e); }
-
-    try {
       const groupId = process.env.WHATSAPP_GROUP_ID;
       if (groupId) {
         await whatsappService.sendGroupMessage(groupId,
           `🎾 *Escalerilla CTG — Partido Agendado*\n\n⚔️ *${updated.challenger.name}* vs *${updated.challenged.name}*\n📅 ${formattedDate}${courtName}`
         );
       }
-    } catch (e) { console.error('⚠️ Error notificación fecha grupo:', e); }
+    });
 
     this.appLogger.challengeScheduled(updated.challenger.name, updated.challenged.name, formattedDate, courtName.replace(' · ', ''));
     return { message: 'Fecha del partido fijada correctamente', challenge: updated };
@@ -366,12 +365,9 @@ export class ChallengesService {
         const loser  = await this.prisma.player.findUnique({ where: { id: loserId  }, select: { id: true, name: true, position: true, email: true, phone: true } });
         if (!winner || !loser) throw new BadRequestException('Jugador no encontrado');
 
-        try {
+        this.notifyAsync(async () => {
           if (winner.phone) { await whatsappService.sendMessage(winner.phone, `🎾 *Club de Tenis Graneros*\n\n🏆 ¡FELICIDADES!\n\nGanaste el partido contra ${loser.name}\nScore: ${result1.score}\n\nNueva posición: #${winner.position}`); await this.sleep(600); }
           if (loser.phone)  { await whatsappService.sendMessage(loser.phone,  `🎾 *Club de Tenis Graneros*\n\nResultado confirmado\n\nPartido vs ${winner.name}\nScore: ${result1.score}\n\nNueva posición: #${loser.position}`); await this.sleep(600); }
-        } catch (e) { console.error('⚠️ Error notificaciones resultado:', e); }
-
-        try {
           const groupId = process.env.WHATSAPP_GROUP_ID;
           if (groupId) {
             const isRetirement = result1.score?.includes('Retiro') || result1.score === 'W.O.';
@@ -380,7 +376,7 @@ export class ChallengesService {
             if (isRetirement) msg += `\n\n_(Partido finalizado por retiro/lesión)_`;
             await whatsappService.sendGroupMessage(groupId, msg);
           }
-        } catch (e) { console.error('⚠️ Error resultado grupo:', e); }
+        });
 
         this.appLogger.challengeResult(winner.name, loser.name, result1.score, winner.position, loser.position);
         return { message: 'Resultado confirmado. Posiciones actualizadas.', winner: { name: winner.name, new_position: winner.position }, loser: { name: loser.name, new_position: loser.position }, score: result1.score };
@@ -390,11 +386,11 @@ export class ChallengesService {
       }
     } else {
       await this.prisma.challenge.update({ where: { id: challengeId }, data: { status: 'disputed' } });
-      try {
+      this.notifyAsync(async () => {
         const message = `🎾 *Club de Tenis Graneros*\n\n⚠️ Los resultados no coinciden.\n\nUn administrador revisará el caso.\n\n${challenge.challenger.name} dice: ${result1.score}\n${challenge.challenged.name} dice: ${result2.score}`;
         if (challenge.challenger.phone) { await whatsappService.sendMessage(challenge.challenger.phone, message); await this.sleep(600); }
         if (challenge.challenged.phone) { await whatsappService.sendMessage(challenge.challenged.phone, message); }
-      } catch (e) { console.error('⚠️ Error notificaciones disputa:', e); }
+      });
       this.appLogger.challengeDisputed(challenge.challenger.name, challenge.challenged.name, result1.score, result2.score);
       return { message: 'Los resultados no coinciden. Un administrador debe revisar el caso.', status: 'disputed', challenger_says: result1, challenged_says: result2 };
     }

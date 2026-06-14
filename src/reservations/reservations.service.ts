@@ -29,6 +29,11 @@ export class ReservationsService {
         private appLogger: AppLogger,
     ) {}
 
+    /** Dispara notificaciones sin bloquear la respuesta HTTP. */
+    private notifyAsync(task: () => Promise<void>) {
+        void task().catch(e => console.error('⚠️ Error notificaciones (async):', e));
+    }
+
     // ── Config ──────────────────────────────────────────────────────────────────
 
     async getSeason(): Promise<string> {
@@ -501,24 +506,21 @@ export class ReservationsService {
 
         // Notificación solo para socios normales (no profes)
         if (!isProfe) {
-            try {
-                if (player.phone) {
-                    const fechaFormateada = formatReservationDate(reservationDate);
-                    await whatsappService.sendMessage(
-                        player.phone,
-                        `📅 *Club de Tenis Graneros*\n\n` +
-                        `✅ Tu reserva está confirmada\n\n` +
-                        `🎾 ${court.name}\n` +
-                        `📆 ${fechaFormateada}\n` +
-                        `🕐 ${data.time_slot} hrs` +
-                        (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
-                        (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
-                        (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
-                    );
-                }
-            } catch (e) {
-                console.log(`📱 [LOG WSP → ${player.phone}] Reserva confirmada ${court.name} ${data.time_slot}`);
-            }
+            this.notifyAsync(async () => {
+                if (!player.phone) return;
+                const fechaFormateada = formatReservationDate(reservationDate);
+                await whatsappService.sendMessage(
+                    player.phone,
+                    `📅 *Club de Tenis Graneros*\n\n` +
+                    `✅ Tu reserva está confirmada\n\n` +
+                    `🎾 ${court.name}\n` +
+                    `📆 ${fechaFormateada}\n` +
+                    `🕐 ${data.time_slot} hrs` +
+                    (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
+                    (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
+                    (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
+                );
+            });
         }
 
         this.appLogger.reservationCreated(player.name, court.name, data.date, data.time_slot, isHighDemand, data.partner_name, data.school_name);
@@ -561,21 +563,18 @@ export class ReservationsService {
         }
 
         if (!reservation.is_challenge) {
-            try {
-                if (player.phone) {
-                    const fechaFormateada = formatReservationDate(reservation.date);
-                    await whatsappService.sendMessage(
-                        player.phone,
-                        `📅 *Club de Tenis Graneros*\n\n` +
-                        `🚫 Tu reserva fue cancelada\n\n` +
-                        `🎾 ${reservation.court?.name || 'Cancha'}\n` +
-                        `📆 ${fechaFormateada}\n` +
-                        `🕐 ${reservation.time_slot} hrs`
-                    );
-                }
-            } catch (e) {
-                console.log(`📱 [LOG WSP → ${player.phone}] Reserva cancelada`);
-            }
+            this.notifyAsync(async () => {
+                if (!player.phone) return;
+                const fechaFormateada = formatReservationDate(reservation.date);
+                await whatsappService.sendMessage(
+                    player.phone,
+                    `📅 *Club de Tenis Graneros*\n\n` +
+                    `🚫 Tu reserva fue cancelada\n\n` +
+                    `🎾 ${reservation.court?.name || 'Cancha'}\n` +
+                    `📆 ${fechaFormateada}\n` +
+                    `🕐 ${reservation.time_slot} hrs`
+                );
+            });
         }
 
         this.appLogger.reservationCancelled(player.name, reservation.court?.name || 'Cancha', reservation.date.toISOString().split('T')[0], reservation.time_slot);
@@ -666,24 +665,21 @@ export class ReservationsService {
             throw e;
         }
 
-        try {
-            if (player.phone) {
-                const fechaFormateada = formatReservationDate(reservationDate);
-                await whatsappService.sendMessage(
-                    player.phone,
-                    `📅 *Club de Tenis Graneros*\n\n` +
-                    `✏️ Tu reserva fue modificada\n\n` +
-                    `🎾 ${court.name}\n` +
-                    `📆 ${fechaFormateada}\n` +
-                    `🕐 ${data.time_slot} hrs` +
-                    (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
-                    (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
-                    (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
-                );
-            }
-        } catch (e) {
-            console.log(`📱 [LOG WSP → ${player.phone}] Reserva modificada`);
-        }
+        this.notifyAsync(async () => {
+            if (!player.phone) return;
+            const fechaFormateada = formatReservationDate(reservationDate);
+            await whatsappService.sendMessage(
+                player.phone,
+                `📅 *Club de Tenis Graneros*\n\n` +
+                `✏️ Tu reserva fue modificada\n\n` +
+                `🎾 ${court.name}\n` +
+                `📆 ${fechaFormateada}\n` +
+                `🕐 ${data.time_slot} hrs` +
+                (isHighDemand ? `\n🔥 Turno de alta demanda` : '') +
+                (data.has_guest ? `\n👤 Visita: ${data.guest_name || 'Externa'}` : '') +
+                (data.partner_name ? `\n🤝 Con: ${data.partner_name}` : '')
+            );
+        });
 
         this.appLogger.reservationCreated(player.name, court.name, data.date, data.time_slot, isHighDemand, data.partner_name);
         return { message: 'Reserva modificada correctamente.', reservation: newReservation };
@@ -709,23 +705,20 @@ export class ReservationsService {
         }
 
         if (!reservation.is_challenge) {
-            try {
+            this.notifyAsync(async () => {
                 const player = await this.prisma.player.findUnique({ where: { id: reservation.player_id } });
-                if (player?.phone) {
-                    const fechaFormateada = formatReservationDate(reservation.date);
-                    await whatsappService.sendMessage(
-                        player.phone,
-                        `📅 *Club de Tenis Graneros*\n\n` +
-                        `🚫 Tu reserva fue cancelada por el administrador\n\n` +
-                        `🎾 ${reservation.court?.name || 'Cancha'}\n` +
-                        `📆 ${fechaFormateada}\n` +
-                        `🕐 ${reservation.time_slot} hrs` +
-                        (reason && reason !== 'Cancelada por administrador' ? `\n📝 Motivo: ${reason}` : '')
-                    );
-                }
-            } catch (e) {
-                console.log(`📱 [LOG WSP] Cancelación admin notificada`);
-            }
+                if (!player?.phone) return;
+                const fechaFormateada = formatReservationDate(reservation.date);
+                await whatsappService.sendMessage(
+                    player.phone,
+                    `📅 *Club de Tenis Graneros*\n\n` +
+                    `🚫 Tu reserva fue cancelada por el administrador\n\n` +
+                    `🎾 ${reservation.court?.name || 'Cancha'}\n` +
+                    `📆 ${fechaFormateada}\n` +
+                    `🕐 ${reservation.time_slot} hrs` +
+                    (reason && reason !== 'Cancelada por administrador' ? `\n📝 Motivo: ${reason}` : '')
+                );
+            });
         }
 
         this.appLogger.reservationAdminCancelled(reservation.court?.name || 'Cancha', reservation.date.toISOString().split('T')[0], reservation.time_slot, reason);

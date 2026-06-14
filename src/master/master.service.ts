@@ -17,6 +17,11 @@ export class MasterService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /** Dispara notificaciones sin bloquear la respuesta HTTP. */
+  private notifyAsync(task: () => Promise<void>) {
+    void task().catch(e => console.error('⚠️ Error notificaciones (async):', e));
+  }
+
   private async sendWsp(phone: string | null | undefined, message: string) {
     if (!phone) return;
     try {
@@ -141,32 +146,33 @@ export class MasterService {
       }
     }
 
-    // Notificar jugadores
-    for (const { name: groupName, players: groupPlayers } of groups) {
-      for (const player of groupPlayers) {
-        await this.sendWsp(
-          player.phone,
-          `🏆 *Master CTG — Categoría ${data.category}*\n\n` +
-          `¡Clasificaste al Master de fin de semestre!\n\n` +
-          `📋 *${groupName}*\n` +
-          `Tus rivales: ${groupPlayers.filter(p => p.id !== player.id).map(p => p.name).join(', ')}\n\n` +
-          `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : '?'} — ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : '?'}\n` +
-          `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '?'}\n\n` +
-          `Coordina tus partidos con tus rivales e ingresa el resultado en la app.`
-        );
-        await this.sleep(500);
-      }
-    }
-
+    // Notificar jugadores (fire-and-forget)
     const grupoANames = grupoA.map(p => p.name).join('\n  • ');
     const grupoBNames = grupoB.map(p => p.name).join('\n  • ');
-    await this.sendWspGroup(
-      `🏆 *Master CTG — Categoría ${data.category} generado*\n\n` +
-      `*Grupo A:*\n  • ${grupoANames}\n\n` +
-      `*Grupo B:*\n  • ${grupoBNames}\n\n` +
-      `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : '?'} al ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : '?'}\n` +
-      `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '?'}`
-    );
+    this.notifyAsync(async () => {
+      for (const { name: groupName, players: groupPlayers } of groups) {
+        for (const player of groupPlayers) {
+          await this.sendWsp(
+            player.phone,
+            `🏆 *Master CTG — Categoría ${data.category}*\n\n` +
+            `¡Clasificaste al Master de fin de semestre!\n\n` +
+            `📋 *${groupName}*\n` +
+            `Tus rivales: ${groupPlayers.filter(p => p.id !== player.id).map(p => p.name).join(', ')}\n\n` +
+            `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : '?'} — ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : '?'}\n` +
+            `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '?'}\n\n` +
+            `Coordina tus partidos con tus rivales e ingresa el resultado en la app.`
+          );
+          await this.sleep(500);
+        }
+      }
+      await this.sendWspGroup(
+        `🏆 *Master CTG — Categoría ${data.category} generado*\n\n` +
+        `*Grupo A:*\n  • ${grupoANames}\n\n` +
+        `*Grupo B:*\n  • ${grupoBNames}\n\n` +
+        `📅 Round Robin: ${data.round_robin_start ? new Date(data.round_robin_start).toLocaleDateString('es-CL') : '?'} al ${data.round_robin_end ? new Date(data.round_robin_end).toLocaleDateString('es-CL') : '?'}\n` +
+        `🎾 Final: ${data.final_date ? new Date(data.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '?'}`
+      );
+    });
 
     return this.findByCategory(data.category);
   }
@@ -201,10 +207,12 @@ export class MasterService {
     const hour    = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
 
-    await this.sendWsp(
-      other.phone,
-      `🏆 *Master CTG*\n\n📅 *${setter.name}* fijó la fecha del partido:\n\n*${formattedDate}*\n\nSi no puedes, coordina con tu rival.`
-    );
+    this.notifyAsync(async () => {
+      await this.sendWsp(
+        other.phone,
+        `🏆 *Master CTG*\n\n📅 *${setter.name}* fijó la fecha del partido:\n\n*${formattedDate}*\n\nSi no puedes, coordina con tu rival.`
+      );
+    });
 
     return this.prisma.masterMatch.findUnique({
       where: { id: matchId },
@@ -259,10 +267,12 @@ export class MasterService {
     if (!hasP1 || !hasP2) {
       const other       = isPlayer1 ? match.player2 : match.player1;
       const currentName = isPlayer1 ? match.player1.name : match.player2.name;
-      await this.sendWsp(
-        other.phone,
-        `🏆 *Master CTG*\n\n${currentName} ya ingresó el resultado del partido.\n\n¡No olvides ingresar tu resultado también!`
-      );
+      this.notifyAsync(async () => {
+        await this.sendWsp(
+          other.phone,
+          `🏆 *Master CTG*\n\n${currentName} ya ingresó el resultado del partido.\n\n¡No olvides ingresar tu resultado también!`
+        );
+      });
       return { message: 'Resultado registrado. Esperando confirmación del otro jugador.' };
     }
 
@@ -284,9 +294,11 @@ export class MasterService {
         `🏆 *Master CTG*\n\n⚠️ Los resultados ingresados no coinciden.\n\nUn administrador revisará el caso.\n\n` +
         `${match.player1.name} dice: ${r1.score}\n${match.player2.name} dice: ${r2.score}`;
 
-      await this.sendWsp(match.player1.phone, message);
-      await this.sleep(600);
-      await this.sendWsp(match.player2.phone, message);
+      this.notifyAsync(async () => {
+        await this.sendWsp(match.player1.phone, message);
+        await this.sleep(600);
+        await this.sendWsp(match.player2.phone, message);
+      });
 
       return {
         message: 'Los resultados no coinciden. Un administrador debe revisar el caso.',
@@ -332,30 +344,30 @@ export class MasterService {
       await this.checkAndGenerateFinal(match.season_id);
     }
 
-    // Notificar jugadores
+    // Notificar jugadores (fire-and-forget)
     const isRetirement = score?.includes('Retiro') || score === 'W.O.';
-
-    await this.sendWsp(
-      winner.phone,
-      `🏆 *Master CTG*\n\n🥇 ¡Ganaste el partido!\n` +
-      `${winner.name} vs ${loser.name}\nScore: ${score}` +
-      (isRetirement ? '\n_(Retiro/Lesión)_' : '')
-    );
-    await this.sleep(600);
-    await this.sendWsp(
-      loser.phone,
-      `🏆 *Master CTG*\n\nResultado confirmado\n` +
-      `${winner.name} vs ${loser.name}\nScore: ${score}` +
-      (isRetirement ? '\n_(Retiro/Lesión)_' : '')
-    );
-
-    // Notificar al grupo
-    await this.sendWspGroup(
-      `🏆 *Master CTG — Resultado Categoría ${(await this.prisma.masterSeason.findUnique({ where: { id: match.season_id } }))?.category}*\n\n` +
-      `🥇 *${winner.name}* venció a *${loser.name}*\n` +
-      `📊 Score: *${score}*` +
-      (isRetirement ? '\n_(Partido finalizado por retiro/lesión)_' : '')
-    );
+    const seasonId = match.season_id;
+    this.notifyAsync(async () => {
+      await this.sendWsp(
+        winner.phone,
+        `🏆 *Master CTG*\n\n🥇 ¡Ganaste el partido!\n` +
+        `${winner.name} vs ${loser.name}\nScore: ${score}` +
+        (isRetirement ? '\n_(Retiro/Lesión)_' : '')
+      );
+      await this.sleep(600);
+      await this.sendWsp(
+        loser.phone,
+        `🏆 *Master CTG*\n\nResultado confirmado\n` +
+        `${winner.name} vs ${loser.name}\nScore: ${score}` +
+        (isRetirement ? '\n_(Retiro/Lesión)_' : '')
+      );
+      await this.sendWspGroup(
+        `🏆 *Master CTG — Resultado Categoría ${(await this.prisma.masterSeason.findUnique({ where: { id: seasonId } }))?.category}*\n\n` +
+        `🥇 *${winner.name}* venció a *${loser.name}*\n` +
+        `📊 Score: *${score}*` +
+        (isRetirement ? '\n_(Partido finalizado por retiro/lesión)_' : '')
+      );
+    });
 
     return {
       message: 'Resultado confirmado.',
@@ -420,17 +432,18 @@ export class MasterService {
       where: { season_id: seasonId, round: 'semifinal' },
       include: { player1: true, player2: true }
     });
-    for (const semi of semis) {
-      await this.sendWsp(semi.player1.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player2.name}*\nCoordiña la fecha e ingresa el resultado en la app.`);
-      await this.sleep(500);
-      await this.sendWsp(semi.player2.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player1.name}*\nCoordiña la fecha e ingresa el resultado en la app.`);
-      await this.sleep(500);
-    }
-
-    await this.sendWspGroup(
-      `🏆 *Master CTG — ¡Semifinales!*\n\n` +
-      semis.map((s, i) => `🏅 Semi ${i+1}: *${s.player1.name}* vs *${s.player2.name}*`).join('\n')
-    );
+    this.notifyAsync(async () => {
+      for (const semi of semis) {
+        await this.sendWsp(semi.player1.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player2.name}*\nCoordiña la fecha e ingresa el resultado en la app.`);
+        await this.sleep(500);
+        await this.sendWsp(semi.player2.phone, `🏆 *Master CTG*\n\n🏅 ¡Clasificaste a Semifinales!\nTu rival: *${semi.player1.name}*\nCoordiña la fecha e ingresa el resultado en la app.`);
+        await this.sleep(500);
+      }
+      await this.sendWspGroup(
+        `🏆 *Master CTG — ¡Semifinales!*\n\n` +
+        semis.map((s, i) => `🏅 Semi ${i+1}: *${s.player1.name}* vs *${s.player2.name}*`).join('\n')
+      );
+    });
   }
 
   async checkAndGenerateFinal(seasonId: string) {
@@ -461,13 +474,14 @@ export class MasterService {
       ? new Date(season.final_date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })
       : 'Por confirmar';
 
-    await this.sendWsp(finalist1.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist2.name}*\n📅 ${finalDateStr}`);
-    await this.sleep(500);
-    await this.sendWsp(finalist2.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist1.name}*\n📅 ${finalDateStr}`);
-
-    await this.sendWspGroup(
-      `🏆 *Master CTG — ¡GRAN FINAL!*\n\n⚔️ *${finalist1.name}* vs *${finalist2.name}*\n📅 ${finalDateStr}`
-    );
+    this.notifyAsync(async () => {
+      await this.sendWsp(finalist1.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist2.name}*\n📅 ${finalDateStr}`);
+      await this.sleep(500);
+      await this.sendWsp(finalist2.phone, `🏆 *Master CTG*\n\n🥇 ¡Estás en la FINAL!\nRival: *${finalist1.name}*\n📅 ${finalDateStr}`);
+      await this.sendWspGroup(
+        `🏆 *Master CTG — ¡GRAN FINAL!*\n\n⚔️ *${finalist1.name}* vs *${finalist2.name}*\n📅 ${finalDateStr}`
+      );
+    });
   }
 
   async deleteSeason(seasonId: string) {
