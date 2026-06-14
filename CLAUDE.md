@@ -10,7 +10,7 @@ Backend del **Club de Tenis Graneros (CTG)**. Gestiona la Escalerilla (ranking t
 **Despliegue:** Railway (Supabase como DB) — ver sección Despliegue
 **Puerto:** 3000 (configurable vía `PORT`)
 
-Existe también `ONBOARDING.md` (guía para colaboradores que vienen de PHP/WordPress). Ojo: menciona `.env.development`, pero el nombre real del archivo es `.env.dev`. El `README.md` es el boilerplate de NestJS, sin información del proyecto.
+Existe también `ONBOARDING.md` (guía para colaboradores que vienen de PHP/WordPress). El `README.md` es el boilerplate de NestJS, sin información del proyecto.
 
 ---
 
@@ -21,23 +21,24 @@ npm run start:dev          # Desarrollo con watch mode
 npm run build              # Compilar (usa --noEmitOnError false a propósito)
 npm run start:prod         # Producción: node dist/main.js
 npm run lint               # ESLint + auto-fix
-npm run test               # Jest (tests en src/**/*.spec.ts — solo hay 2: app.controller y common/dates)
+npm run test               # Jest (tests en src/**/*.spec.ts)
 npm run test:e2e           # Tests end-to-end
+npx jest src/common/dates.spec.ts   # Un test específico
 
-# Un test específico
-npx jest src/common/dates.spec.ts
+# Verificación de tipos REAL (el build ignora errores TS a propósito):
+npx tsc -p tsconfig.build.json --noEmit
 
 # Prisma
 npx prisma generate        # Regenerar Prisma Client tras cambios en schema
 npx prisma studio          # UI visual de la DB
-npx prisma db seed         # Ejecutar seed (crea admin/admin123)
-# ⚠️ Antes de usar migrate dev/deploy, leer la sección "Schema y Migraciones (DRIFT)"
+npx prisma db seed         # Ejecutar seed (idempotente: admin/admin123)
+# ⚠️ Antes de usar migrate dev, leer la sección "Schema y Migraciones"
 
 # Scripts de utilidad (cargas masivas, fixes de posiciones/teléfonos)
 npx ts-node scripts/<nombre>.ts
 ```
 
-Archivos de entorno: `.env.dev` (dev, **no** `.env.development`) y `.env.production` (cuando `NODE_ENV=production`). Ver `src/app.module.ts`.
+Archivos de entorno: `.env.dev` (dev) y `.env.production` (cuando `NODE_ENV=production`). Ver `src/app.module.ts`.
 
 ---
 
@@ -88,20 +89,22 @@ export const emailService = new EmailService();
 
 Se importan directamente. Es intencional: WhatsApp mantiene una sesión Puppeteer/Chromium persistente durante toda la vida del proceso (se inicializa en `main.ts` antes de `app.listen`).
 
-### Autenticación sin Guards NestJS
+### Autenticación: guards globales
 
-Las rutas **no usan `@UseGuards()`**. La verificación JWT se hace manualmente en cada controller, extrayendo `Authorization: Bearer <token>`:
+Dos guards globales registrados como `APP_GUARD` en `AuthModule` (orden importa: JWT primero, Admin después):
 
-```ts
-private getUserId(auth: string): string {
-  const payload = this.jwtService.verify(auth.split(' ')[1]);
-  return payload.sub;
-}
-```
+- **`JwtAuthGuard`** (`src/auth/jwt-auth.guard.ts`): exige `Authorization: Bearer <token>` válido en toda ruta, salvo las marcadas con `@Public()` (`src/auth/public.decorator.ts`). Adjunta el payload a `request.user`. Rutas públicas: `POST /auth/{login,register,forgot-password,reset-password}` y `GET /` (health check).
+- **`AdminGuard`** (`src/auth/admin.guard.ts`): exige `request.user.is_admin === true` en rutas marcadas con `@Admin()` (`src/auth/admin.decorator.ts`). Sin token → 401 (JwtAuthGuard corre primero); token de no-admin → 403. `@Admin()` se aplica a nivel de clase en `AdminPlayersController`, `AdminChallengesController`, `CronController`, `TestController`, y por handler en los endpoints admin de `ReservationsController` y `MasterController`.
 
-El payload JWT contiene `{ sub: userId, is_admin: boolean, admin_role: string | null }`. `admin_role` ∈ `null | "escalerilla" | "reservas" | "all"`. Las rutas admin **no tienen protección por guard** — confían en que el frontend solo muestra esas opciones a admins.
+El payload JWT contiene `{ sub: userId, is_admin: boolean, admin_role: string | null }`. `admin_role` ∈ `null | "escalerilla" | "reservas" | "all"`. **El guard solo distingue `is_admin`, no granularidad por `admin_role`** (pendiente fase 2).
 
-**Código muerto:** `src/auth/wordpress-auth.{service,guard}.ts` y `wp-user.decorator.ts` (auth por cookies de WordPress contra `clubdetenisgraneros.cl/wp-json/ctg/v1/me`) no están registrados en ningún módulo ni usados por ningún controller. No basarse en ellos.
+La config de `JwtModule` está centralizada en `src/auth/jwt.config.ts` (`registerAsync` + `ConfigService`); **`JWT_SECRET` es obligatorio** (la app lanza error al arrancar si falta, sin fallback).
+
+Varios controllers además derivan el `userId`/`player_id` del body o verifican el token manualmente (redundante con el guard, inofensivo). Pendiente fase 2: derivarlo siempre de `request.user`.
+
+### Validación de entrada
+
+`ValidationPipe` global (`whitelist: true, transform: true`) en `main.ts`. Los DTOs usan `class-validator` (`LoginDto`, `RegisterDto`, `CreateReservationDto`, `CreatePlayerDto`/`UpdatePlayerDto`). `whitelist: true` **elimina props no declaradas en el DTO** — al agregar un campo nuevo a un endpoint, declararlo en el DTO o se pierde silenciosamente. Varios handlers aún usan tipos inline (sin validar); se migran gradualmente.
 
 ### Logging
 
@@ -135,7 +138,7 @@ Conceptos clave:
 
 - `position = null` → jugador fuera de la escalerilla (sin ranking activo)
 - `position = 0` → admins (excluidos de la lista pública vía filtro `is_admin` en `players.service.ts`)
-- Posiciones son enteros únicos ≥ 1 para jugadores activos (unicidad por convención, **no** hay unique constraint en el schema)
+- Posiciones son enteros únicos ≥ 1 para jugadores activos (unicidad por convención, **no** hay unique constraint en el schema — el corrimiento descendente y los `updateMany` con increment lo violarían transitoriamente; la protección la dan las transacciones)
 - **Posición temporal 9999**: pivot al mover jugadores. El orden de updates importa (siempre descendente primero).
 
 ### Algoritmo de Corrimiento (`challenge-rules.service.ts` → `processWin`)
@@ -146,7 +149,7 @@ Conceptos clave:
 4. Bajar afectados 1 posición (en orden descendente para evitar colisiones)
 5. Colocar ganador en la posición del perdedor
 
-No usa transacción Prisma — opera en secuencia para evitar deadlocks.
+Los pasos 2-5 corren dentro de un **`prisma.$transaction([...])`** (array ordenado): si algo falla, no queda la escalerilla a medio mover. Lo mismo aplica a `penalizeBothPlayers` (cron), `scheduleMatch` y `modify` (swap de reserva). `AdminChallengesService.resolveChallenge` delega en `processWin`/`applyPostMatchStatus`/`updateStats` (misma lógica que el flujo normal; antes tenía la suya propia).
 
 ### Transiciones de Estado Atómicas
 
@@ -258,26 +261,19 @@ Categorías A/B/C/D = rangos de posición [1-12, 13-24, 25-36, 37-48]. Toma los 
 
 Flujo automático: round robin → semifinales (al completar todos los partidos de grupo; cruces 1A-2B / 1B-2A) → final (al completar ambas semis). Estados de season: `pending → active → semifinals → final → completed`.
 
-> ⚠️ **Bug latente:** `MasterService.submitPlayerResult` escribe `player1_result`/`player2_result` con `as any`, pero esos campos **no existen** ni en `schema.prisma`, ni en migraciones, ni en el Prisma Client generado. La doble confirmación de resultados del Master lanzaría `PrismaClientValidationError` en runtime. El flujo admin (`POST /master/matches/:id/result`) sí funciona. Si se toca el Master, resolver esto primero (agregar los campos al schema o eliminar el flujo).
+**Doble confirmación de resultados**: `submitPlayerResult` (jugador) guarda en `master_matches.player1_result`/`player2_result` (Json). Si ambos coinciden → procesa; si difieren → `disputed`; el admin resuelve con `POST /master/matches/:id/result`. (Estos campos y la migración correspondiente existen desde el saneamiento de junio 2026 — antes el flujo de jugador estaba roto.)
 
 ---
 
-## Schema y Migraciones (DRIFT — leer antes de tocar Prisma)
+## Schema y Migraciones
 
-**Las migraciones en `prisma/migrations/` NO reflejan el schema actual.** Columnas y tablas presentes en `schema.prisma` (y en la DB de Supabase) que no aparecen en ninguna migración: `court_blocks` (tabla completa), `Player.extra_high_demand_slots`, `Player.school_names`, `Reservation.partner_name`, `Reservation.is_challenge`, `Reservation.challenge_id`, `Reservation.school_name`, entre otras. Fueron aplicadas con `prisma db push` o SQL manual.
+El drift histórico fue saneado en junio 2026. **Todas las migraciones están versionadas** (`prisma/migrations/`, ya no en `.gitignore`) y reconstruyen la DB correctamente con `migrate deploy`:
+- `20260611100000_sync_schema_drift`: migración **idempotente** que registra todo lo creado históricamente con `db push` (tablas `courts`, `reservations`, `system_config`, `court_blocks`, las 4 del Master; columnas `extra_high_demand_slots`, `school_names`, `partner_name`, `is_challenge`, etc.). En una DB existente es no-op (guardas `IF NOT EXISTS` / `DO ... EXCEPTION WHEN duplicate_object`).
+- `20260611100002_add_performance_indexes`: índices de consulta + el único índice schema-vs-DB que **no** está en `schema.prisma`.
 
-Consecuencias prácticas:
-- `npx prisma migrate dev` detectará drift y puede proponer **resetear la DB** — no aceptar a ciegas.
-- Una DB creada desde cero con `migrate deploy` **no** coincidirá con el schema; usar `prisma db push` o el snapshot del schema.
-- El Docker CMD ejecuta `migrate deploy` al iniciar: contra la DB existente es no-op de migraciones viejas, no "arregla" el drift.
-- `schema.prisma.backup` en `prisma/` es un respaldo manual, ignorarlo.
+**Única excepción schema ↔ DB**: el índice único PARCIAL `reservations_active_slot_uniq` (`court_id, date, time_slot` WHERE `status = 'active'`) — Prisma no soporta índices parciales, así que vive solo en SQL. `migrate dev` lo reportará como drift esperado; **no eliminarlo**. Es la protección anti doble-booking: el código captura su violación (Prisma `P2002`) y la traduce a `BadRequestException`. Pre-deploy: si pudieran existir duplicados activos, verificar antes (comentario en la migración).
 
-### Modelos con `prisma as any`
-
-- `(this.prisma as any).courtBlock` en `reservations.service.ts` — el tipo se regenera con `npx prisma generate` y el cast se podría eliminar.
-- `(this.prisma as any).reservation` en `challenges.service.ts` — por campos añadidos post-tipos (`is_challenge`, `challenge_id`, `partner_name`).
-- `lightChargeConfig` ya se usa tipado (sin cast).
-- **El `build` ignora errores TS** (`--noEmitOnError false`) precisamente por estos casts. No agregar más `as any` sin justificación.
+`npx prisma generate` mantiene el client al día. **No usar `(this.prisma as any)`** — todos los modelos/campos están tipados. (El `build` aún usa `--noEmitOnError false` por inercia; el código compila limpio con `npx tsc -p tsconfig.build.json --noEmit`.)
 
 ---
 
@@ -286,15 +282,14 @@ Consecuencias prácticas:
 | Variable | Descripción |
 |----------|-------------|
 | `DATABASE_URL` | Connection string del pooler de Supabase (pgBouncer) |
-| `DIRECT_URL` | Connection string directo de Supabase (requerido para migraciones) |
-| `JWT_SECRET` | Secreto JWT (7 días de expiración; tiene fallback inseguro hardcodeado en `auth.module.ts`) |
+| `DIRECT_URL` | **Obligatoria.** Connection string directo de Supabase (puerto 5432) para migraciones. Sin ella `migrate deploy` falla y el contenedor no arranca. |
+| `JWT_SECRET` | **Obligatoria.** Secreto JWT (7 días). La app lanza error al arrancar si falta (sin fallback). |
 | `RESEND_API_KEY` | API key de Resend.com (emails desde `escalerilla@clubdetenisgraneros.cl`) |
 | `FRONTEND_URL` | URL del frontend (CORS + links en notificaciones) |
 | `WHATSAPP_ENABLED` | `"true"` para activar WhatsApp (requiere Chromium) |
 | `WHATSAPP_GROUP_ID` | ID del grupo de WhatsApp (obtener via `GET /test/grupos`) |
 | `WHATSAPP_SESSION_PATH` | Path para la sesión (default: `.wwebjs_auth`) |
 | `PUPPETEER_EXECUTABLE_PATH` | Path a Chromium (en Docker: `/usr/bin/chromium`) |
-| `WORDPRESS_URL` | Solo usado por el código muerto de auth WordPress |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Cloudinary |
 | `PORT` | Puerto (default: 3000) |
 
@@ -302,9 +297,10 @@ Consecuencias prácticas:
 
 ## Despliegue
 
-Hay **dos configuraciones de build conviviendo** (verificar en Railway cuál está activa antes de tocar):
-- `Dockerfile`: `node:20-slim` + Chromium via apt. CMD: `npx prisma migrate deploy && node dist/main.js`. Es la referencia más reciente (commits "fix: dockerfile limpio").
-- `railway.json` + `nixpacks.toml` + `Procfile`: builder NIXPACKS con `npm run start:prod` (nixpacks aún declara `nodejs_18`, sin Chromium → sin WhatsApp).
+**Railway con Dockerfile** (`node:20-slim` + Chromium via apt). CMD: `npx prisma migrate deploy && node dist/main.js` — aplica migraciones en cada arranque. Ya no hay `railway.json`/`nixpacks.toml`/`Procfile` (definían un `startCommand` que **anulaba el CMD del Dockerfile** y por eso las migraciones no corrían desde marzo 2026; eliminados).
+
+- **El "Custom Start Command" de Railway → Settings → Deploy debe quedar VACÍO**, o volvería a anular el CMD del Dockerfile.
+- `DIRECT_URL` debe estar en las variables de Railway (staging y prod) o el arranque falla en `migrate deploy`.
 
 **Supabase**: `DATABASE_URL` (pooler) + `DIRECT_URL` (directa, para migraciones).
 
@@ -328,7 +324,7 @@ Trigger manual: `POST /cron/run` (ejecuta los dos primeros).
 
 **WhatsApp** (whatsapp-web.js + Puppeteer):
 - Formato de números chilenos: `569XXXXXXXX@c.us` (el servicio agrega `56` automáticamente)
-- Nunca bloquean el flujo principal — siempre en `try/catch`; si falla, se loguea el mensaje por consola
+- **No bloquean el request**: los services (`challenges`, `reservations`, `master`) envían vía un helper `notifyAsync(task)` fire-and-forget (`void task().catch(...)`). El cálculo del `return` y las mutaciones de estado quedan SIEMPRE fuera del `notifyAsync`.
 - `sendGroupMessage(groupId, msg)` → grupo del club; `sleep(500-600ms)` entre mensajes para evitar ban
 - Al iniciar limpia locks de Chromium (`SingletonLock`, etc.) de la sesión
 
@@ -345,16 +341,15 @@ Trigger manual: `POST /cron/run` (ejecuta los dos primeros).
 
 ## Seed
 
-`npx prisma db seed` crea usuario `admin` / `admin123` / `admin@ctg.cl` con `is_admin: true` y player con `position = 0` (excluido de la lista pública). Falla si ya existe (no es idempotente).
+`npx prisma db seed` crea (vía `upsert`, idempotente) usuario `admin` / `admin123` / `admin@ctg.cl` con `is_admin: true` y player con `position = 0` (excluido de la lista pública). Correrlo de nuevo no falla.
 
 ---
 
 ## Gotchas Importantes
 
 - **`ChallengeRulesService`** se provee en `ChallengesModule` Y en `PlayersModule` (instanciado en ambos para evitar circular deps).
-- **`admin-challenges.service.ts`** y **`admin-players.service.ts` (`movePlayer`)** usan su propia lógica de movimiento de posiciones con `updateMany` increment/decrement (no delegan a `ChallengeRulesService`) — verificar consistencia al modificar.
-- **`cancelChallenge` admin** revierte wins/losses pero **NO revierte** cambios de ranking (documentado en su respuesta).
-- **`getWeeklyHighDemandUsage`** en admin-players usa cálculo de semana propio en hora del servidor y **no cuenta cancelaciones tardías** — inconsistente con `checkHighDemandLimit` de reservations (que sí las cuenta y usa semana Chile).
-- **Posición al registrar**: `AuthService.register` asigna `lastPlayer.position + 1` automáticamente. `AdminPlayersService.createPlayer` deja `position = null` si no se especifica.
-- **Master**: doble confirmación rota por campos inexistentes (ver sección Master).
-- Existe un directorio basura `node_modules 2/` en la raíz (no versionado).
+- **`admin-players.service.ts` (`movePlayer`)** usa su propia lógica de movimiento de posiciones con `updateMany` increment/decrement (no delega a `ChallengeRulesService`) — verificar consistencia al modificar. (`admin-challenges.service.ts resolveChallenge` SÍ delega desde junio 2026.)
+- **`cancelChallenge` admin** revierte wins/losses pero **NO revierte** cambios de ranking (documentado en su respuesta; decisión de negocio).
+- **Cancelaciones tardías**: se discriminan por el string literal `'Cancelación tardía - turno descontado'` en queries de cupo (reservations.service y admin-players). No cambiarlo sin actualizar ambos.
+- **Posición al registrar**: `AuthService.register` (público) asigna `lastPlayer.position + 1` automáticamente. `AdminPlayersService.createPlayer` deja `position = null` si no se especifica.
+- **Pendiente fase 2** (documentado en el spec de junio 2026): granularidad de permisos por `admin_role`; cerrar/moderar el registro público; derivar `player_id` del token en vez del body; migrar de whatsapp-web.js a WhatsApp Business API; soporte multi-instancia (hoy **requiere 1 réplica** en Railway por crons y sesión WhatsApp); paginación de listados y N+1.

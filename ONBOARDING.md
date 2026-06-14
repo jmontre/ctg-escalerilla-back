@@ -70,13 +70,15 @@ npm install
 NEXT_PUBLIC_API_URL=https://ctg-escalerilla-back-staging.up.railway.app
 ```
 
-**Backend** — crea `.env.development` en la raíz del proyecto backend:
+**Backend** — crea `.env.dev` en la raíz del proyecto backend:
 ```env
-DATABASE_URL=postgresql://...url-staging...
+DATABASE_URL=postgresql://...url-staging-pooler...
+DIRECT_URL=postgresql://...url-staging-directa...
 FRONTEND_URL=https://ctg-escalerilla-front-xxx.vercel.app
 WHATSAPP_ENABLED=false
 JWT_SECRET=...pedir a Javier...
 ```
+`DIRECT_URL` (conexión directa de Supabase, puerto 5432) es obligatoria para correr migraciones. `JWT_SECRET` también: la app no arranca sin él.
 
 > ⚠️ Nunca subas estos archivos al repo. Ya están en `.gitignore`.
 
