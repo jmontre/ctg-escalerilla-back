@@ -191,6 +191,12 @@ export class ChallengesService {
     if (scheduledDate <= new Date()) throw new BadRequestException('La fecha debe ser en el futuro');
     if (scheduledDate > challenge.play_deadline) throw new BadRequestException('La fecha supera el plazo límite del partido');
 
+    type ScheduledChallenge = Awaited<ReturnType<typeof this.prisma.challenge.update>> & {
+      challenger: { id: string; name: string; phone: string | null };
+      challenged: { id: string; name: string; phone: string | null };
+    };
+    let updated: ScheduledChallenge;
+
     // ── Reserva automática ────────────────────────────────────────────────────
     if (courtId) {
       const court = await this.prisma.court.findUnique({ where: { id: courtId } });
@@ -254,9 +260,10 @@ export class ChallengesService {
       // Nombre del rival para partner_name
       const other = challenge.challenger_id === playerId ? challenge.challenged : challenge.challenger;
 
-      // Cancelar reserva anterior de este desafío + crear la nueva, atómico.
+      // Cancelar reserva anterior + crear la nueva + fijar la fecha del desafío,
+      // todo atómico: o se reprograma completo o no cambia nada.
       try {
-        await this.prisma.$transaction([
+        const [, , updatedTx] = await this.prisma.$transaction([
           this.prisma.reservation.updateMany({
             where: { challenge_id: challengeId, status: 'active' },
             data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Fecha reprogramada' }
@@ -275,23 +282,32 @@ export class ChallengesService {
               status:         'active',
             }
           }),
+          this.prisma.challenge.update({
+            where: { id: challengeId },
+            data:  { scheduled_date: scheduledDate },
+            include: {
+              challenger: { select: { id: true, name: true, phone: true } },
+              challenged: { select: { id: true, name: true, phone: true } }
+            }
+          }),
         ]);
+        updated = updatedTx;
       } catch (e: any) {
         // Índice parcial reservations_active_slot_uniq: carrera perdida
         if (e?.code === 'P2002') throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
         throw e;
       }
+    } else {
+      // Sin cancha: solo fijar la fecha del desafío.
+      updated = await this.prisma.challenge.update({
+        where: { id: challengeId },
+        data:  { scheduled_date: scheduledDate },
+        include: {
+          challenger: { select: { id: true, name: true, phone: true } },
+          challenged: { select: { id: true, name: true, phone: true } }
+        }
+      });
     }
-
-    // ── Actualizar challenge ───────────────────────────────────────────────────
-    const updated = await this.prisma.challenge.update({
-      where: { id: challengeId },
-      data:  { scheduled_date: scheduledDate },
-      include: {
-        challenger: { select: { id: true, name: true, phone: true } },
-        challenged: { select: { id: true, name: true, phone: true } }
-      }
-    });
 
     const isChallenger  = challenge.challenger_id === playerId;
     const setter = isChallenger ? updated.challenger : updated.challenged;
