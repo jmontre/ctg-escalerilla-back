@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Backend del **Club de Tenis Graneros (CTG)**. Gestiona la Escalerilla (ranking tipo ladder), desafíos entre jugadores, torneo Master, reservas de canchas (con cupos de alta demanda, cobro de luz y bloqueos), notificaciones WhatsApp/email y administración.
 
 **Stack:** NestJS 11 + TypeScript + PostgreSQL + Prisma ORM 5
-**Despliegue:** Railway (Supabase como DB) — ver sección Despliegue
+**Despliegue:** Railway (Postgres gestionado por Railway) — ver sección Despliegue
 **Puerto:** 3000 (configurable vía `PORT`)
 
 Existe también `ONBOARDING.md` (guía para colaboradores que vienen de PHP/WordPress). El `README.md` es el boilerplate de NestJS, sin información del proyecto.
@@ -281,8 +281,7 @@ El drift histórico fue saneado en junio 2026. **Todas las migraciones están ve
 
 | Variable | Descripción |
 |----------|-------------|
-| `DATABASE_URL` | Connection string del pooler de Supabase (pgBouncer) |
-| `DIRECT_URL` | **Obligatoria.** Connection string directo de Supabase (puerto 5432) para migraciones. Sin ella `migrate deploy` falla y el contenedor no arranca. |
+| `DATABASE_URL` | **Obligatoria.** Connection string del Postgres de Railway. Es conexión directa (Railway Postgres no tiene pooler), así que la usa también `migrate deploy`. En prod usa el host interno `postgres.railway.internal`; en dev, el proxy público `*.proxy.rlwy.net`. |
 | `JWT_SECRET` | **Obligatoria.** Secreto JWT (7 días). La app lanza error al arrancar si falta (sin fallback). |
 | `RESEND_API_KEY` | API key de Resend.com (emails desde `escalerilla@clubdetenisgraneros.cl`) |
 | `FRONTEND_URL` | URL del frontend (CORS + links en notificaciones) |
@@ -300,9 +299,9 @@ El drift histórico fue saneado en junio 2026. **Todas las migraciones están ve
 **Railway con Dockerfile** (`node:20-slim` + Chromium via apt). CMD: `npx prisma migrate deploy && node dist/main.js` — aplica migraciones en cada arranque. Ya no hay `railway.json`/`nixpacks.toml`/`Procfile` (definían un `startCommand` que **anulaba el CMD del Dockerfile** y por eso las migraciones no corrían desde marzo 2026; eliminados).
 
 - **El "Custom Start Command" de Railway → Settings → Deploy debe quedar VACÍO**, o volvería a anular el CMD del Dockerfile.
-- `DIRECT_URL` debe estar en las variables de Railway (staging y prod) o el arranque falla en `migrate deploy`.
+- `DATABASE_URL` debe apuntar al Postgres de Railway. No se usa `DIRECT_URL`: el `datasource` del schema solo declara `url` (Railway Postgres es conexión directa, sin pooler). Antes el schema declaraba `directUrl = env("DIRECT_URL")` con esa variable sin definir → `migrate deploy` fallaba con `P1012`; se eliminó.
 
-**Supabase**: `DATABASE_URL` (pooler) + `DIRECT_URL` (directa, para migraciones).
+**Base de datos**: Postgres gestionado por Railway (servicio Postgres del mismo proyecto), no Supabase.
 
 **CORS** (`main.ts`): permite `localhost:3000/3001`, `reservas.` y `escalerilla.clubdetenisgraneros.cl`, `FRONTEND_URL`, requests sin origin, y cualquier `*.vercel.app` (previews).
 

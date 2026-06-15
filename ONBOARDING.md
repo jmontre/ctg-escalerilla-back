@@ -72,13 +72,12 @@ NEXT_PUBLIC_API_URL=https://ctg-escalerilla-back-staging.up.railway.app
 
 **Backend** — crea `.env.dev` en la raíz del proyecto backend:
 ```env
-DATABASE_URL=postgresql://...url-staging-pooler...
-DIRECT_URL=postgresql://...url-staging-directa...
+DATABASE_URL=postgresql://...url-postgres-railway-staging...
 FRONTEND_URL=https://ctg-escalerilla-front-xxx.vercel.app
 WHATSAPP_ENABLED=false
 JWT_SECRET=...pedir a Javier...
 ```
-`DIRECT_URL` (conexión directa de Supabase, puerto 5432) es obligatoria para correr migraciones. `JWT_SECRET` también: la app no arranca sin él.
+`DATABASE_URL` apunta al Postgres de Railway (úsala también para migraciones; no hay `DIRECT_URL`). `JWT_SECRET` es obligatoria: la app no arranca sin ella.
 
 > ⚠️ Nunca subas estos archivos al repo. Ya están en `.gitignore`.
 
