@@ -442,6 +442,12 @@ export class MasterService {
       data: { winner_id: winnerId, score, status: 'completed', played_at: new Date() }
     });
 
+    // Liberar la reserva del partido (igual que el desafío)
+    await this.prisma.reservation.updateMany({
+      where: { master_match_id: matchId, status: 'active' },
+      data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Partido completado' }
+    });
+
     if (match.group_id && match.round === 'group') {
       await this.prisma.masterGroupPlayer.updateMany({
         where: { group_id: match.group_id, player_id: winnerId },
@@ -599,6 +605,14 @@ export class MasterService {
   }
 
   async deleteSeason(seasonId: string) {
+    const matches = await this.prisma.masterMatch.findMany({ where: { season_id: seasonId }, select: { id: true } });
+    const matchIds = matches.map(m => m.id);
+    if (matchIds.length) {
+      await this.prisma.reservation.updateMany({
+        where: { master_match_id: { in: matchIds }, status: 'active' },
+        data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Torneo eliminado' }
+      });
+    }
     await this.prisma.masterMatch.deleteMany({ where: { season_id: seasonId } });
     const groups = await this.prisma.masterGroup.findMany({ where: { season_id: seasonId } });
     for (const group of groups) {
