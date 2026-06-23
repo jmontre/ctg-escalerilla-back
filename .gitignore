@@ -40,6 +40,12 @@ npm-debug.log*
 .env.production
 .env.dev
 
+# Prisma — artefactos compilados del seed y respaldos manuales (no versionar)
+prisma/seed.js
+prisma/seed.d.ts
+prisma/seed.js.map
+prisma/schema.prisma.backup
+
 # Build artifacts
 *.tsbuildinfo
 dist_test/
