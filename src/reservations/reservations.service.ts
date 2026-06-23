@@ -68,7 +68,7 @@ export class ReservationsService {
 
         const reservations = await this.prisma.reservation.findMany({
             where: { date: new Date(date), status: { in: ['active', 'completed'] } },
-            include: { player: { select: { id: true, name: true } }, court: true }
+            include: { player: { select: { id: true, name: true } }, court: true, master_match: { select: { season: { select: { category: true } } } } }
         });
 
         const blocks = await this.prisma.courtBlock.findMany({
@@ -100,6 +100,8 @@ export class ReservationsService {
                             guest_name:   existing.guest_name,
                             partner_name: existing.partner_name || null,
                             is_challenge: existing.is_challenge || false,
+                            is_master:       existing.is_master || false,
+                            master_category: existing.master_match?.season?.category ?? null,
                             school_name:  existing.school_name  || null,
                         } : null,
                     };
