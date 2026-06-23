@@ -48,10 +48,10 @@ export class MasterController {
   scheduleMatch(
     @Param('id') id: string,
     @Headers('authorization') auth: string,
-    @Body() body: { scheduled_date: string }
+    @Body() body: { scheduled_date: string; court_id?: string }
   ) {
     const userId = this.getUserId(auth);
-    return this.masterService.scheduleMatch(id, userId, new Date(body.scheduled_date));
+    return this.masterService.scheduleMatch(id, userId, new Date(body.scheduled_date), body.court_id);
   }
 
   /**

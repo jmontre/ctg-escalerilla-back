@@ -2,12 +2,19 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { whatsappService } from '../notifications/whatsapp.service';
+import { toChileDateStr, chileWeekBoundsFromStr } from '../common/dates';
 
 const CATEGORY_RANGES: Record<string, [number, number]> = {
   A: [1, 12],
   B: [13, 24],
   C: [25, 36],
   D: [37, 48],
+};
+
+// Slots de alta demanda (mantener sincronizado con challenges.service y reservations.service)
+const HIGH_DEMAND: Record<string, string[]> = {
+  verano:   ['07:45', '09:30', '18:15', '20:00'],
+  invierno: ['09:30', '11:15', '16:30', '18:15'],
 };
 
 // Campos de jugador seguros para los endpoints públicos del Master (findAll /
@@ -202,13 +209,13 @@ export class MasterService {
     return this.findByCategory(data.category);
   }
 
-  async scheduleMatch(matchId: string, userId: string, scheduledDate: Date) {
-    const player = await this.prisma.player.findUnique({ where: { user_id: userId } });
+  async scheduleMatch(matchId: string, userId: string, scheduledDate: Date, courtId?: string) {
+    const player = await this.prisma.player.findUnique({ where: { user_id: userId }, include: { children: true } });
     if (!player) throw new BadRequestException('Jugador no encontrado');
 
     const match = await this.prisma.masterMatch.findUnique({
       where: { id: matchId },
-      include: { player1: true, player2: true }
+      include: { player1: true, player2: true, season: { select: { category: true } } }
     });
 
     if (!match) throw new NotFoundException('Partido no encontrado');
@@ -218,24 +225,106 @@ export class MasterService {
     }
     if (scheduledDate <= new Date()) throw new BadRequestException('La fecha debe ser en el futuro');
 
-    await this.prisma.masterMatch.update({
-      where: { id: matchId },
-      data: { scheduled_date: scheduledDate }
-    });
-
     const setter = match.player1_id === player.id ? match.player1 : match.player2;
     const other  = match.player1_id === player.id ? match.player2 : match.player1;
 
+    // ── Reserva automática (si se eligió cancha) ──────────────────────────────
+    if (courtId) {
+      const court = await this.prisma.court.findUnique({ where: { id: courtId } });
+      if (!court || !court.is_active) throw new BadRequestException('Cancha no disponible.');
+
+      const timeStr = scheduledDate.toLocaleTimeString('es-CL', {
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago'
+      });
+      const [h, m] = timeStr.split(':');
+      const slot = `${h.padStart(2,'0')}:${m.padStart(2,'0')}`;
+      const chileDate = toChileDateStr(scheduledDate);
+      const dateChile = new Date(`${chileDate}T00:00:00`);
+
+      // Slot ocupado por otra reserva (que no sea de este partido)
+      const slotBusy = await this.prisma.reservation.findFirst({
+        where: { court_id: courtId, date: dateChile, time_slot: slot, status: 'active', NOT: { master_match_id: matchId } }
+      });
+      if (slotBusy) throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
+
+      // Otra reserva activa del jugador (OR explícito por master_match_id nullable)
+      const otherActive = await this.prisma.reservation.findFirst({
+        where: {
+          player_id: player.id,
+          status: 'active',
+          OR: [ { master_match_id: null }, { master_match_id: { not: matchId } } ],
+        }
+      });
+      if (otherActive) throw new BadRequestException('Ya tienes una reserva activa. Cancélala antes de fijar fecha.');
+
+      // Cupo de alta demanda
+      const config = await this.prisma.systemConfig.findUnique({ where: { key: 'season' } });
+      const season = config?.value || 'verano';
+      const isHighDemand = HIGH_DEMAND[season]?.includes(slot) ?? false;
+
+      if (isHighDemand) {
+        const { weekStart, weekEnd } = chileWeekBoundsFromStr(chileDate);
+        const playerIds   = [player.id, ...(player.children?.map(c => c.id) || [])];
+        const extraSlots  = player.extra_high_demand_slots ?? 0;
+        const familyLimit = player.member_type === 'hijo_socio' ? 1 : 2 + (player.children?.length || 0) + extraSlots;
+        const used = await this.prisma.reservation.count({
+          where: { player_id: { in: playerIds }, is_high_demand: true, status: 'active', date: { gte: weekStart, lte: weekEnd }, NOT: { master_match_id: matchId } }
+        });
+        if (used >= familyLimit) throw new BadRequestException(`Ya usaste los ${familyLimit} turnos de alta demanda de esta semana.`);
+      }
+
+      // Cancelar reserva anterior de este partido + crear la nueva + fijar fecha, atómico.
+      try {
+        await this.prisma.$transaction([
+          this.prisma.reservation.updateMany({
+            where: { master_match_id: matchId, status: 'active' },
+            data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Fecha reprogramada' }
+          }),
+          this.prisma.reservation.create({
+            data: {
+              player_id:       player.id,
+              court_id:        courtId,
+              date:            dateChile,
+              time_slot:       slot,
+              is_high_demand:  isHighDemand,
+              has_guest:       false,
+              partner_name:    other.name,
+              is_master:       true,
+              master_match_id: matchId,
+              status:          'active',
+            }
+          }),
+          this.prisma.masterMatch.update({ where: { id: matchId }, data: { scheduled_date: scheduledDate } }),
+        ]);
+      } catch (e: any) {
+        if (e?.code === 'P2002') throw new BadRequestException('Ese horario ya está ocupado en esa cancha.');
+        throw e;
+      }
+    } else {
+      await this.prisma.masterMatch.update({ where: { id: matchId }, data: { scheduled_date: scheduledDate } });
+    }
+
+    // ── Notificaciones (fire-and-forget) ──────────────────────────────────────
     const cap     = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     const weekday = scheduledDate.toLocaleDateString('es-CL', { weekday: 'long', timeZone: 'America/Santiago' });
     const day     = scheduledDate.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', timeZone: 'America/Santiago' });
     const hour    = scheduledDate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
     const formattedDate = `${cap(weekday)} ${day} — ${hour} hrs`;
 
+    let courtName = '';
+    if (courtId) {
+      const court = await this.prisma.court.findUnique({ where: { id: courtId } });
+      if (court) courtName = ` · ${court.name}`;
+    }
+
     this.notifyAsync(async () => {
       await this.sendWsp(
         other.phone,
-        `🏆 *Master CTG*\n\n📅 *${setter.name}* fijó la fecha del partido:\n\n*${formattedDate}*\n\nSi no puedes, coordina con tu rival.`
+        `🏆 *Master CTG*\n\n📅 *${setter.name}* agendó el partido:\n\n*${formattedDate}*${courtName}\n\nSi no puedes, coordina con tu rival.`
+      );
+      await this.sleep(500);
+      await this.sendWspGroup(
+        `🏆 *Master CTG — Categoría ${match.season.category}*\n\n⚔️ *${match.player1.name}* vs *${match.player2.name}*\n📅 ${formattedDate}${courtName}`
       );
     });
 
