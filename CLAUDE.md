@@ -255,9 +255,9 @@ La temporada activa se lee de `SystemConfig` key `"season"` (`"verano"` | `"invi
 
 ## Reglas de Negocio: Torneo Master
 
-Categorías A/B/C/D = rangos de posición [1-12, 13-24, 25-36, 37-48]. Toma los 8 primeros del rango (falla si hay menos). Distribución serpentina:
-- Grupo A: jugadores 1°, 4°, 5°, 8° del rango
-- Grupo B: jugadores 2°, 3°, 6°, 7° del rango
+Categorías A/B/C/D = rangos de posición [1-12, 13-24, 25-36, 37-48]. Toma los 8 primeros del rango (falla si hay menos). Distribución por paridad de posición:
+- Grupo A: posiciones impares del rango (1°, 3°, 5°, 7°)
+- Grupo B: posiciones pares del rango (2°, 4°, 6°, 8°)
 
 Flujo automático: round robin → semifinales (al completar todos los partidos de grupo; cruces 1A-2B / 1B-2A) → final (al completar ambas semis). Estados de season: `pending → active → semifinals → final → completed`.
 

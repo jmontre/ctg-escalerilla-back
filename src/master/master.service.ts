@@ -102,8 +102,10 @@ export class MasterService {
       throw new BadRequestException(`La Categoría ${data.category} tiene solo ${players.length} jugadores. Se necesitan 8.`);
     }
 
-    const grupoA = [players[0], players[3], players[4], players[7]];
-    const grupoB = [players[1], players[2], players[5], players[6]];
+    // Grupo A: posiciones impares del rango (1°, 3°, 5°, 7°)
+    // Grupo B: posiciones pares del rango (2°, 4°, 6°, 8°)
+    const grupoA = [players[0], players[2], players[4], players[6]];
+    const grupoB = [players[1], players[3], players[5], players[7]];
 
     const season = await this.prisma.masterSeason.create({
       data: {
