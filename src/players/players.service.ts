@@ -12,9 +12,26 @@ export class PlayersService {
   ) { }
 
   async findAll() {
+    // Endpoint público (@Public): se exponen solo campos no sensibles.
+    // NO incluir email, phone ni has_debt (datos personales de socios).
     const players = await this.prisma.player.findMany({
       orderBy: { position: 'asc' },
-      include: {
+      select: {
+        id: true,
+        user_id: true,
+        name: true,
+        avatar_url: true,
+        position: true,
+        wins: true,
+        losses: true,
+        total_matches: true,
+        immune_until: true,
+        vulnerable_until: true,
+        member_type: true,
+        parent_id: true,
+        created_at: true,
+        extra_high_demand_slots: true,
+        school_names: true,
         user: {
           select: { username: true, is_admin: true, admin_role: true }
         },

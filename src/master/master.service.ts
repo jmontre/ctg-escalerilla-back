@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { whatsappService } from '../notifications/whatsapp.service';
 
@@ -7,6 +8,20 @@ const CATEGORY_RANGES: Record<string, [number, number]> = {
   B: [13, 24],
   C: [25, 36],
   D: [37, 48],
+};
+
+// Campos de jugador seguros para los endpoints públicos del Master (findAll /
+// findByCategory). NO incluir email, phone ni has_debt. Los métodos que envían
+// WhatsApp siguen usando el player completo (necesitan phone).
+const PUBLIC_PLAYER_SELECT: Prisma.PlayerSelect = {
+  id: true,
+  name: true,
+  avatar_url: true,
+  position: true,
+  wins: true,
+  losses: true,
+  total_matches: true,
+  member_type: true,
 };
 
 @Injectable()
@@ -47,8 +62,12 @@ export class MasterService {
       include: {
         groups: {
           include: {
-            players: { include: { player: true } },
-            matches: { include: { player1: true, player2: true, winner: true } }
+            players: { include: { player: { select: PUBLIC_PLAYER_SELECT } } },
+            matches: { include: {
+              player1: { select: PUBLIC_PLAYER_SELECT },
+              player2: { select: PUBLIC_PLAYER_SELECT },
+              winner:  { select: PUBLIC_PLAYER_SELECT },
+            } }
           }
         }
       },
@@ -64,11 +83,15 @@ export class MasterService {
         groups: {
           include: {
             players: {
-              include: { player: true },
+              include: { player: { select: PUBLIC_PLAYER_SELECT } },
               orderBy: [{ wins: 'desc' }, { sets_won: 'desc' }]
             },
             matches: {
-              include: { player1: true, player2: true, winner: true },
+              include: {
+                player1: { select: PUBLIC_PLAYER_SELECT },
+                player2: { select: PUBLIC_PLAYER_SELECT },
+                winner:  { select: PUBLIC_PLAYER_SELECT },
+              },
               orderBy: { created_at: 'asc' }
             }
           }
