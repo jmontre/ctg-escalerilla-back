@@ -225,6 +225,7 @@ export class ReservationsService {
             where: {
                 date:         { gte: start, lte: end },
                 is_challenge: false,
+                is_master:    false,
                 status:       { in: ['active', 'completed'] },
             },
             include: {
@@ -564,6 +565,13 @@ export class ReservationsService {
             });
         }
 
+        if (reservation.master_match_id) {
+            await this.prisma.masterMatch.update({
+                where: { id: reservation.master_match_id },
+                data:  { scheduled_date: null }
+            });
+        }
+
         if (!reservation.is_challenge) {
             this.notifyAsync(async () => {
                 if (!player.phone) return;
@@ -702,6 +710,13 @@ export class ReservationsService {
         if (reservation.challenge_id) {
             await this.prisma.challenge.update({
                 where: { id: reservation.challenge_id },
+                data:  { scheduled_date: null }
+            });
+        }
+
+        if (reservation.master_match_id) {
+            await this.prisma.masterMatch.update({
+                where: { id: reservation.master_match_id },
                 data:  { scheduled_date: null }
             });
         }
