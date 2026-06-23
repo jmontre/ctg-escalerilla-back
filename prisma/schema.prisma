@@ -125,7 +125,8 @@ model MasterSeason {
   final_date        DateTime?
   created_at        DateTime  @default(now())
 
-  groups MasterGroup[]
+  groups  MasterGroup[]
+  matches MasterMatch[]
 
   @@map("master_seasons")
 }
@@ -176,10 +177,11 @@ model MasterMatch {
   played_at      DateTime?
   created_at     DateTime  @default(now())
 
-  group   MasterGroup? @relation("group_matches", fields: [group_id], references: [id])
-  player1 Player       @relation("master_player1", fields: [player1_id], references: [id])
-  player2 Player       @relation("master_player2", fields: [player2_id], references: [id])
-  winner  Player?      @relation("master_winner", fields: [winner_id], references: [id])
+  season  MasterSeason  @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  group   MasterGroup?  @relation("group_matches", fields: [group_id], references: [id])
+  player1 Player        @relation("master_player1", fields: [player1_id], references: [id])
+  player2 Player        @relation("master_player2", fields: [player2_id], references: [id])
+  winner  Player?       @relation("master_winner", fields: [winner_id], references: [id])
 
   @@map("master_matches")
 }
