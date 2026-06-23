@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, BadRequestException } from '@nestjs/common';
 import { ChallengesService } from './challenges.service';
+import { Public } from '../auth/public.decorator';
 
 class CreateChallengeDto {
   challenger_id: string;
@@ -27,6 +28,7 @@ export class ChallengesController {
    * GET /challenges
    * Listar todos los desafíos
    */
+  @Public()
   @Get()
   findAll() {
     return this.challengesService.findAll();

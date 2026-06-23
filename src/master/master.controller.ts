@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, Unauthorize
 import { MasterService } from './master.service';
 import { JwtService } from '@nestjs/jwt';
 import { Admin } from '../auth/admin.decorator';
+import { Public } from '../auth/public.decorator';
 
 @Controller('master')
 export class MasterController {
@@ -20,9 +21,11 @@ export class MasterController {
     }
   }
 
+  @Public()
   @Get()
   findAll() { return this.masterService.findAll(); }
 
+  @Public()
   @Get(':category')
   findByCategory(@Param('category') category: string) {
     return this.masterService.findByCategory(category.toUpperCase());

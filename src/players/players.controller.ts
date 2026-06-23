@@ -1,6 +1,7 @@
 import { Controller, Get, Put, Post, Delete, Param, Body, Headers, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { JwtService } from '@nestjs/jwt';
+import { Public } from '../auth/public.decorator';
 
 @Controller('players')
 export class PlayersController {
@@ -9,6 +10,7 @@ export class PlayersController {
     private jwtService: JwtService,
   ) { }
 
+  @Public()
   @Get()
   findAll() {
     return this.playersService.findAll();

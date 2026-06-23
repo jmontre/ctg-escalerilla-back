@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, Unau
 import { ReservationsService } from './reservations.service';
 import { JwtService } from '@nestjs/jwt';
 import { Admin } from '../auth/admin.decorator';
+import { Public } from '../auth/public.decorator';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @Controller('reservations')
@@ -42,6 +43,7 @@ export class ReservationsController {
   @Get('courts')
   getCourts() { return this.reservationsService.getCourts(); }
 
+  @Public()
   @Get('availability')
   getAvailability(@Query('date') date: string) {
     if (!date) throw new UnauthorizedException('Debes indicar una fecha.');
