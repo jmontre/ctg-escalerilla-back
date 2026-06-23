@@ -177,11 +177,12 @@ model MasterMatch {
   played_at      DateTime?
   created_at     DateTime  @default(now())
 
-  season  MasterSeason  @relation(fields: [season_id], references: [id], onDelete: Cascade)
-  group   MasterGroup?  @relation("group_matches", fields: [group_id], references: [id])
-  player1 Player        @relation("master_player1", fields: [player1_id], references: [id])
-  player2 Player        @relation("master_player2", fields: [player2_id], references: [id])
-  winner  Player?       @relation("master_winner", fields: [winner_id], references: [id])
+  season       MasterSeason  @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  group        MasterGroup?  @relation("group_matches", fields: [group_id], references: [id])
+  player1      Player        @relation("master_player1", fields: [player1_id], references: [id])
+  player2      Player        @relation("master_player2", fields: [player2_id], references: [id])
+  winner       Player?       @relation("master_winner", fields: [winner_id], references: [id])
+  reservations Reservation[] @relation("match_reservations")
 
   @@map("master_matches")
 }
@@ -214,13 +215,15 @@ model Reservation {
   cancelled_at   DateTime?
   cancel_reason  String?
   created_at     DateTime  @default(now())
-  is_challenge   Boolean   @default(false)
-  challenge_id   String?
-  school_name   String?
-  
+  is_challenge     Boolean   @default(false)
+  challenge_id     String?
+  is_master        Boolean   @default(false)
+  master_match_id  String?
+  school_name      String?
 
-  player Player @relation(fields: [player_id], references: [id])
-  court  Court  @relation(fields: [court_id], references: [id])
+  player       Player       @relation(fields: [player_id], references: [id])
+  court        Court        @relation(fields: [court_id], references: [id])
+  master_match MasterMatch? @relation("match_reservations", fields: [master_match_id], references: [id], onDelete: SetNull)
 
   @@index([date])
   @@index([player_id, status])
