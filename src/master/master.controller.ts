@@ -10,19 +10,16 @@ import {
 } from '@nestjs/common';
 import { MasterService } from './master.service';
 import { Admin } from '../auth/admin.decorator';
-import { Public } from '../auth/public.decorator';
 
 @Controller('master')
 export class MasterController {
   constructor(private masterService: MasterService) {}
 
-  @Public()
   @Get()
   findAll() {
     return this.masterService.findAll();
   }
 
-  @Public()
   @Get(':category')
   findByCategory(@Param('category') category: string) {
     return this.masterService.findByCategory(category.toUpperCase());
