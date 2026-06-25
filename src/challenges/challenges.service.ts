@@ -52,16 +52,6 @@ export class ChallengesService {
     return player.id;
   }
 
-  /** Resuelve el player_id a partir del userId del JWT. */
-  async getPlayerIdFromUserId(userId: string): Promise<string> {
-    const player = await this.prisma.player.findUnique({
-      where: { user_id: userId },
-      select: { id: true },
-    });
-    if (!player) throw new NotFoundException('Jugador no encontrado para este usuario');
-    return player.id;
-  }
-
   /** Dispara notificaciones sin bloquear la respuesta HTTP. */
   private notifyAsync(task: () => Promise<void>) {
     void task().catch((e) =>
