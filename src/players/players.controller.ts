@@ -6,22 +6,17 @@ import {
   Delete,
   Param,
   Body,
-  Headers,
+  Req,
   Request,
-  UnauthorizedException,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
 import { PlayersService } from './players.service';
-import { JwtService } from '@nestjs/jwt';
 import { Public } from '../auth/public.decorator';
 
 @Controller('players')
 export class PlayersController {
-  constructor(
-    private playersService: PlayersService,
-    private jwtService: JwtService,
-  ) {}
+  constructor(private playersService: PlayersService) {}
 
   @Public()
   @Get()
@@ -58,7 +53,7 @@ export class PlayersController {
    */
   @Put('me')
   async updateMe(
-    @Headers('authorization') auth: string,
+    @Req() req: any,
     @Body()
     body: {
       name?: string;
@@ -67,40 +62,17 @@ export class PlayersController {
       new_password?: string;
     },
   ) {
-    const userId = this.getUserIdFromToken(auth);
-    return this.playersService.updateMe(userId, body);
+    return this.playersService.updateMe(req.user.sub, body);
   }
 
-  /**
-   * POST /players/me/avatar
-   * Subir foto de perfil (base64)
-   */
   @Post('me/avatar')
-  async uploadAvatar(
-    @Headers('authorization') auth: string,
-    @Body() body: { image: string },
-  ) {
+  async uploadAvatar(@Req() req: any, @Body() body: { image: string }) {
     if (!body.image) throw new BadRequestException('imagen requerida');
-    const userId = this.getUserIdFromToken(auth);
-    return this.playersService.uploadAvatar(userId, body.image);
-  }
-
-  private getUserIdFromToken(auth: string): string {
-    if (!auth || !auth.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Token no proporcionado');
-    }
-    try {
-      const token = auth.split(' ')[1];
-      const payload = this.jwtService.verify(token);
-      return payload.sub;
-    } catch {
-      throw new UnauthorizedException('Token inválido');
-    }
+    return this.playersService.uploadAvatar(req.user.sub, body.image);
   }
 
   @Delete('me/avatar')
-  async deleteAvatar(@Headers('authorization') auth: string) {
-    const userId = this.getUserIdFromToken(auth);
-    return this.playersService.deleteAvatar(userId);
+  async deleteAvatar(@Req() req: any) {
+    return this.playersService.deleteAvatar(req.user.sub);
   }
 }

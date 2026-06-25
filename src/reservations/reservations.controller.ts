@@ -7,32 +7,18 @@ import {
   Body,
   Param,
   Query,
-  Headers,
+  Req,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ReservationsService } from './reservations.service';
-import { JwtService } from '@nestjs/jwt';
 import { Admin } from '../auth/admin.decorator';
 import { Public } from '../auth/public.decorator';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @Controller('reservations')
 export class ReservationsController {
-  constructor(
-    private reservationsService: ReservationsService,
-    private jwtService: JwtService,
-  ) {}
-
-  private getUserId(auth: string): string {
-    if (!auth?.startsWith('Bearer '))
-      throw new UnauthorizedException('Token no proporcionado');
-    try {
-      const payload = this.jwtService.verify(auth.split(' ')[1]);
-      return payload.sub;
-    } catch {
-      throw new UnauthorizedException('Token inválido');
-    }
-  }
+  constructor(private reservationsService: ReservationsService) {}
 
   @Admin()
   @Get('blocks')
@@ -124,9 +110,8 @@ export class ReservationsController {
   }
 
   @Get('my')
-  getMyReservations(@Headers('authorization') auth: string) {
-    const userId = this.getUserId(auth);
-    return this.reservationsService.getMyReservations(userId);
+  getMyReservations(@Req() req: Request & { user: { sub: string } }) {
+    return this.reservationsService.getMyReservations(req.user.sub);
   }
 
   @Admin()
@@ -146,27 +131,27 @@ export class ReservationsController {
 
   @Post()
   create(
-    @Headers('authorization') auth: string,
+    @Req() req: Request & { user: { sub: string } },
     @Body() body: CreateReservationDto,
   ) {
-    const userId = this.getUserId(auth);
-    return this.reservationsService.create(userId, body);
+    return this.reservationsService.create(req.user.sub, body);
   }
 
   @Patch(':id/modify')
   modify(
-    @Headers('authorization') auth: string,
+    @Req() req: Request & { user: { sub: string } },
     @Param('id') id: string,
     @Body() body: CreateReservationDto,
   ) {
-    const userId = this.getUserId(auth);
-    return this.reservationsService.modify(userId, id, body);
+    return this.reservationsService.modify(req.user.sub, id, body);
   }
 
   @Delete(':id')
-  cancel(@Headers('authorization') auth: string, @Param('id') id: string) {
-    const userId = this.getUserId(auth);
-    return this.reservationsService.cancel(userId, id);
+  cancel(
+    @Req() req: Request & { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    return this.reservationsService.cancel(req.user.sub, id);
   }
 
   @Admin()
