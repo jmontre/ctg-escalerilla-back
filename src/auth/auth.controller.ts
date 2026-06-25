@@ -5,25 +5,30 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { Public } from './public.decorator';
 
-const isProd = process.env.NODE_ENV === 'production';
+// COOKIE_CROSS_SITE=true → SameSite=None; Secure (requerido para cross-domain HTTPS: Railway ↔ Vercel)
+// Sin esta variable (dev local) → SameSite=Lax; sin Secure (funciona en localhost same-site)
+// Setear en Railway staging Y prod. No depender de NODE_ENV para no quedar ciegos si no está.
+function isCookieSecure() {
+  return process.env.COOKIE_CROSS_SITE === 'true';
+}
 
 function setCookieToken(res: Response, token: string) {
+  const secure = isCookieSecure();
   res.cookie('auth_token', token, {
     httpOnly: true,
-    secure: isProd,
-    // cross-origin (railway.app ↔ clubdetenisgraneros.cl): prod necesita 'none'
-    // dev (localhost ↔ localhost): 'lax' es suficiente y no requiere Secure
-    sameSite: isProd ? 'none' : 'lax',
+    secure,
+    sameSite: secure ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
 }
 
 function clearCookieToken(res: Response) {
+  const secure = isCookieSecure();
   res.clearCookie('auth_token', {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? 'none' : 'lax',
+    secure,
+    sameSite: secure ? 'none' : 'lax',
     path: '/',
   });
 }
