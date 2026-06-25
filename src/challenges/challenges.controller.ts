@@ -8,7 +8,6 @@ import {
   Request,
 } from '@nestjs/common';
 import { ChallengesService } from './challenges.service';
-import { Public } from '../auth/public.decorator';
 
 class CreateChallengeDto {
   challenged_id: string;
@@ -37,7 +36,6 @@ export class ChallengesController {
    * GET /challenges
    * Listar todos los desafíos
    */
-  @Public()
   @Get()
   findAll() {
     return this.challengesService.findAll();

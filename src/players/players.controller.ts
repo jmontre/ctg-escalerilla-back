@@ -12,13 +12,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PlayersService } from './players.service';
-import { Public } from '../auth/public.decorator';
 
 @Controller('players')
 export class PlayersController {
   constructor(private playersService: PlayersService) {}
 
-  @Public()
   @Get()
   findAll() {
     return this.playersService.findAll();
