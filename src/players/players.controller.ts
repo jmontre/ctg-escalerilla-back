@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Delete, Param, Body, Headers, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Param, Body, Headers, Request, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { JwtService } from '@nestjs/jwt';
 import { Public } from '../auth/public.decorator';
@@ -17,13 +17,16 @@ export class PlayersController {
   }
 
   @Get('user/:userId')
-  findByUserId(@Param('userId') userId: string) {
+  findByUserId(@Param('userId') userId: string, @Request() req: any) {
+    if (userId !== req.user.sub && !req.user.is_admin) {
+      throw new ForbiddenException('No tienes permiso para acceder a este perfil');
+    }
     return this.playersService.findByUserId(userId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.playersService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: any) {
+    return this.playersService.findOne(id, { sub: req.user.sub, is_admin: req.user.is_admin });
   }
 
   @Get(':id/available-challenges')

@@ -1,8 +1,17 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export class EmailService {
+  private _resend: Resend | null = null;
+
+  // Lazy init: el cliente se crea recién al primer envío, no al importar el módulo.
+  // Así los tests que importan constantes de esta cadena no necesitan RESEND_API_KEY.
+  private get resend(): Resend {
+    if (!this._resend) {
+      this._resend = new Resend(process.env.RESEND_API_KEY);
+    }
+    return this._resend;
+  }
+
   private fromEmail = 'CTG Escalerilla <escalerilla@clubdetenisgraneros.cl>';
 
   async sendChallengeNotification(
@@ -11,7 +20,7 @@ export class EmailService {
     challengedEmail: string
   ) {
     try {
-      await resend.emails.send({
+      await this.resend.emails.send({
         from: this.fromEmail,
         to: challengedEmail,
         subject: '🎾 Nuevo Desafío en la Escalerilla',
@@ -60,7 +69,7 @@ export class EmailService {
     challengerEmail: string
   ) {
     try {
-      await resend.emails.send({
+      await this.resend.emails.send({
         from: this.fromEmail,
         to: challengerEmail,
         subject: '✅ Tu desafío fue aceptado',
@@ -113,7 +122,7 @@ export class EmailService {
     challengerEmail: string
   ) {
     try {
-      await resend.emails.send({
+      await this.resend.emails.send({
         from: this.fromEmail,
         to: challengerEmail,
         subject: '🎾 Desafío Rechazado - Subiste en la escalerilla',
@@ -168,7 +177,7 @@ export class EmailService {
         ? '🏆 ¡Ganaste el partido!'
         : '🎾 Resultado confirmado';
 
-      await resend.emails.send({
+      await this.resend.emails.send({
         from: this.fromEmail,
         to: playerEmail,
         subject,

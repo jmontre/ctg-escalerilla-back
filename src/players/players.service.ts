@@ -1,8 +1,67 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
 import { uploadAvatar, deleteAvatar } from './cloudinary.service';
 import * as bcrypt from 'bcryptjs';
+
+// Allowlist de campos para GET /players/:id.
+// Añadir un campo aquí es una decisión consciente de exposición.
+export const PUBLIC_PLAYER_SELECT = {
+  id: true,
+  name: true,
+  avatar_url: true,
+  position: true,
+  wins: true,
+  losses: true,
+  total_matches: true,
+  immune_until: true,
+  vulnerable_until: true,
+  member_type: true,
+  school_names: true,
+  created_at: true,
+  user: { select: { username: true, is_admin: true } },
+  challenges_made: {
+    orderBy: { created_at: 'desc' as const },
+    take: 10,
+    select: {
+      id: true,
+      status: true,
+      created_at: true,
+      play_deadline: true,
+      resolved_at: true,
+      challenged: { select: { name: true, position: true } },
+    },
+  },
+  challenges_received: {
+    orderBy: { created_at: 'desc' as const },
+    take: 10,
+    select: {
+      id: true,
+      status: true,
+      created_at: true,
+      play_deadline: true,
+      resolved_at: true,
+      challenger: { select: { name: true, position: true } },
+    },
+  },
+  ranking_history: {
+    orderBy: { created_at: 'desc' as const },
+    take: 20,
+  },
+} satisfies Prisma.PlayerSelect;
+
+// Propietario y admin reciben adicionalmente todos los campos PII.
+export const FULL_PLAYER_SELECT = {
+  ...PUBLIC_PLAYER_SELECT,
+  email: true,
+  phone: true,
+  has_debt: true,
+  user_id: true,
+  parent_id: true,
+  extra_high_demand_slots: true,
+  user: { select: { username: true, email: true, is_admin: true } },
+} satisfies Prisma.PlayerSelect;
 
 @Injectable()
 export class PlayersService {
@@ -65,28 +124,20 @@ export class PlayersService {
       }));
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, requester: { sub: string; is_admin: boolean }) {
+    // Consulta mínima para determinar propiedad antes de elegir el select.
+    const owner = await this.prisma.player.findUnique({
+      where: { id },
+      select: { user_id: true },
+    });
+    if (!owner) throw new NotFoundException('Jugador no encontrado');
+
+    const isSelfOrAdmin = owner.user_id === requester.sub || requester.is_admin;
+
     const player = await this.prisma.player.findUnique({
       where: { id },
-      include: {
-        user: { select: { username: true, email: true, is_admin: true } },
-        challenges_made: {
-          orderBy: { created_at: 'desc' },
-          take: 10,
-          include: { challenged: { select: { name: true, position: true } } }
-        },
-        challenges_received: {
-          orderBy: { created_at: 'desc' },
-          take: 10,
-          include: { challenger: { select: { name: true, position: true } } }
-        },
-        ranking_history: {
-          orderBy: { created_at: 'desc' },
-          take: 20
-        }
-      }
+      select: isSelfOrAdmin ? FULL_PLAYER_SELECT : PUBLIC_PLAYER_SELECT,
     });
-
     if (!player) throw new NotFoundException('Jugador no encontrado');
 
     return { ...player, is_admin: player.user?.is_admin || false };

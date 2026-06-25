@@ -1,9 +1,8 @@
-import { Controller, Get, Post, Body, Param, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, BadRequestException, Request } from '@nestjs/common';
 import { ChallengesService } from './challenges.service';
 import { Public } from '../auth/public.decorator';
 
 class CreateChallengeDto {
-  challenger_id: string;
   challenged_id: string;
 }
 
@@ -13,15 +12,15 @@ export class ChallengesController {
 
   /**
    * POST /challenges
-   * Crear un nuevo desafío
+   * Crear un nuevo desafío — el challenger es siempre el usuario autenticado.
    */
   @Post()
-  create(@Body() dto: CreateChallengeDto) {
-    if (!dto.challenger_id || !dto.challenged_id) {
-      throw new BadRequestException('challenger_id y challenged_id son requeridos');
+  async create(@Body() dto: CreateChallengeDto, @Request() req: any) {
+    if (!dto.challenged_id) {
+      throw new BadRequestException('challenged_id es requerido');
     }
-
-    return this.challengesService.create(dto.challenger_id, dto.challenged_id);
+    const challengerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    return this.challengesService.create(challengerId, dto.challenged_id);
   }
 
   /**
@@ -45,78 +44,63 @@ export class ChallengesController {
 
   /**
    * POST /challenges/:id/accept
-   * Aceptar un desafío
+   * Aceptar un desafío — el jugador que acepta es siempre el usuario autenticado.
    */
   @Post(':id/accept')
-  accept(
-    @Param('id') id: string,
-    @Body() body: { player_id: string }
-  ) {
-    if (!body.player_id) {
-      throw new BadRequestException('player_id es requerido');
-    }
-    return this.challengesService.accept(id, body.player_id);
+  async accept(@Param('id') id: string, @Request() req: any) {
+    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    return this.challengesService.accept(id, playerId);
   }
 
   /**
    * POST /challenges/:id/reject
-   * Rechazar un desafío (intercambio automático)
+   * Rechazar un desafío — el jugador que rechaza es siempre el usuario autenticado.
    */
   @Post(':id/reject')
-  reject(
-    @Param('id') id: string,
-    @Body() body: { player_id: string }
-  ) {
-    if (!body.player_id) {
-      throw new BadRequestException('player_id es requerido');
-    }
-    return this.challengesService.reject(id, body.player_id);
+  async reject(@Param('id') id: string, @Request() req: any) {
+    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    return this.challengesService.reject(id, playerId);
   }
 
   /**
    * POST /challenges/:id/result
-   * Ingresar resultado del partido
+   * Ingresar resultado del partido — el jugador que reporta es siempre el usuario autenticado.
    */
   @Post(':id/result')
-  submitResult(
+  async submitResult(
     @Param('id') id: string,
-    @Body() body: {
-      player_id: string;
-      winner_id: string;
-      score: string;
-    }
+    @Request() req: any,
+    @Body() body: { winner_id: string; score: string }
   ) {
-    if (!body.player_id || !body.winner_id || !body.score) {
-      throw new BadRequestException('player_id, winner_id y score son requeridos');
+    if (!body.winner_id || !body.score) {
+      throw new BadRequestException('winner_id y score son requeridos');
     }
-
-    return this.challengesService.submitResult(
-      id,
-      body.player_id,
-      {
-        winnerId: body.winner_id,
-        score: body.score
-      }
-    );
+    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    return this.challengesService.submitResult(id, playerId, {
+      winnerId: body.winner_id,
+      score: body.score,
+    });
   }
 
   /**
    * POST /challenges/:id/schedule
-   * Fijar o actualizar la fecha acordada del partido
+   * Fijar o actualizar la fecha acordada del partido — el jugador es el usuario autenticado.
    */
   @Post(':id/schedule')
-  scheduleMatch(
+  async scheduleMatch(
     @Param('id') id: string,
-    @Body() body: { player_id: string; scheduled_date: string; court_id?: string }
+    @Request() req: any,
+    @Body() body: { scheduled_date: string; court_id?: string }
   ) {
-    if (!body.player_id || !body.scheduled_date) {
-      throw new BadRequestException('player_id y scheduled_date son requeridos');
+    if (!body.scheduled_date) {
+      throw new BadRequestException('scheduled_date es requerido');
     }
+    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
     return this.challengesService.scheduleMatch(
       id,
-      body.player_id,
+      playerId,
       new Date(body.scheduled_date),
-      body.court_id,  // ← agrega esto
+      body.court_id,
     );
   }
 }
