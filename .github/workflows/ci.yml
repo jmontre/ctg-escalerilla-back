@@ -30,4 +30,7 @@ jobs:
         run: npx tsc -p tsconfig.build.json --noEmit
 
       - name: Tests
+        env:
+          RESEND_API_KEY: re_dummy_key_for_ci
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
         run: npm test -- --no-coverage --passWithNoTests
