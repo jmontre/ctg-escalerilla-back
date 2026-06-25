@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from './challenge-rules.service';
 import { whatsappService } from '../notifications/whatsapp.service';
@@ -6,6 +7,18 @@ import { emailService } from '../notifications/email.service';
 import { AppLogger } from '../common/app.logger';
 import { add } from 'date-fns';
 import { toChileDateStr, chileWeekBoundsFromStr } from '../common/dates';
+
+// Campos públicos de un jugador expuestos en respuestas de desafíos a terceros.
+// Sin PII (sin email, phone, has_debt).
+export const CHALLENGE_PLAYER_SELECT = {
+  id: true,
+  name: true,
+  position: true,
+  wins: true,
+  losses: true,
+  avatar_url: true,
+  member_type: true,
+} satisfies Prisma.PlayerSelect;
 
 const HIGH_DEMAND: Record<string, string[]> = {
   verano:   ['07:45', '09:30', '18:15', '20:00'],
@@ -43,8 +56,8 @@ export class ChallengesService {
     const challenge = await this.prisma.challenge.create({
       data: { challenger_id: challengerId, challenged_id: challengedId, status: 'pending', accept_deadline: add(now, { hours: 24 }), play_deadline: add(now, { days: 5 }) },
       include: {
-        challenger: { select: { id: true, name: true, position: true, email: true, phone: true } },
-        challenged: { select: { id: true, name: true, position: true, email: true, phone: true } }
+        challenger: { select: { id: true, name: true, position: true, phone: true } },
+        challenged: { select: { id: true, name: true, position: true, phone: true } }
       }
     });
     this.notifyAsync(async () => {
@@ -66,13 +79,20 @@ export class ChallengesService {
   }
 
   async findOne(id: string) {
-    return this.prisma.challenge.findUnique({ where: { id }, include: { challenger: true, challenged: true } });
+    return this.prisma.challenge.findUnique({
+      where: { id },
+      include: {
+        challenger: { select: CHALLENGE_PLAYER_SELECT },
+        challenged: { select: CHALLENGE_PLAYER_SELECT },
+      },
+    });
   }
 
   async accept(challengeId: string, playerId: string) {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
       include: {
+        // email incluido solo para la notificación interna (emailService), no va al response.
         challenger: { select: { id: true, name: true, email: true, phone: true } },
         challenged: { select: { id: true, name: true, email: true, phone: true } }
       }
@@ -95,15 +115,21 @@ export class ChallengesService {
       await emailService.sendAcceptedNotification(updated.challenger.name, updated.challenged.name, updated.challenger.email);
     });
     this.appLogger.challengeAccepted(updated.challenger.name, updated.challenged.name);
-    return { message: 'Desafío aceptado exitosamente', challenge: updated };
+    // Strippear email antes de devolver: se usó internamente para emailService, no cruza HTTP.
+    const { email: _ce, ...challengerSafe } = updated.challenger;
+    const { email: _de, ...challengedSafe } = updated.challenged;
+    return {
+      message: 'Desafío aceptado exitosamente',
+      challenge: { ...updated, challenger: challengerSafe, challenged: challengedSafe },
+    };
   }
 
   async reject(challengeId: string, playerId: string) {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
       include: {
-        challenger: { select: { id: true, name: true, email: true, phone: true } },
-        challenged: { select: { id: true, name: true, email: true, phone: true } }
+        challenger: { select: { id: true, name: true, phone: true } },
+        challenged: { select: { id: true, name: true, phone: true } }
       }
     });
     if (!challenge) throw new BadRequestException('Desafío no encontrado');
@@ -141,8 +167,8 @@ export class ChallengesService {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
       include: {
-        challenger: { select: { id: true, name: true, email: true, phone: true } },
-        challenged: { select: { id: true, name: true, email: true, phone: true } }
+        challenger: { select: { id: true, name: true, phone: true } },
+        challenged: { select: { id: true, name: true, phone: true } }
       }
     });
     if (!challenge) throw new BadRequestException('Desafío no encontrado');
@@ -165,8 +191,8 @@ export class ChallengesService {
     const updated = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
       include: {
-        challenger: { select: { id: true, name: true, email: true, phone: true } },
-        challenged: { select: { id: true, name: true, email: true, phone: true } }
+        challenger: { select: { id: true, name: true, phone: true } },
+        challenged: { select: { id: true, name: true, phone: true } }
       }
     });
     if (!updated) throw new BadRequestException('Error al actualizar desafío');
@@ -358,8 +384,8 @@ export class ChallengesService {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
       include: {
-        challenger: { select: { id: true, name: true, email: true, phone: true, position: true } },
-        challenged: { select: { id: true, name: true, email: true, phone: true, position: true } }
+        challenger: { select: { id: true, name: true, phone: true, position: true } },
+        challenged: { select: { id: true, name: true, phone: true, position: true } }
       }
     });
     if (!challenge) throw new BadRequestException('Desafío no encontrado');
@@ -387,8 +413,8 @@ export class ChallengesService {
           data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Partido completado' }
         });
 
-        const winner = await this.prisma.player.findUnique({ where: { id: winnerId }, select: { id: true, name: true, position: true, email: true, phone: true } });
-        const loser  = await this.prisma.player.findUnique({ where: { id: loserId  }, select: { id: true, name: true, position: true, email: true, phone: true } });
+        const winner = await this.prisma.player.findUnique({ where: { id: winnerId }, select: { id: true, name: true, position: true, phone: true } });
+        const loser  = await this.prisma.player.findUnique({ where: { id: loserId  }, select: { id: true, name: true, position: true, phone: true } });
         if (!winner || !loser) throw new BadRequestException('Jugador no encontrado');
 
         this.notifyAsync(async () => {

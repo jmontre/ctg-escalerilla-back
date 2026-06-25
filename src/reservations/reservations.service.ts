@@ -97,8 +97,8 @@ export class ReservationsService {
                                 ? `Escuela ${existing.school_name}`
                                 : existing.player.name,
                             has_guest:    existing.has_guest,
-                            guest_name:   existing.guest_name,
-                            partner_name: existing.partner_name || null,
+                            // guest_name y partner_name omitidos: PII de terceros en endpoint @Public.
+                            // Ver quién ocupa el slot no requiere saber con quién juega.
                             is_challenge: existing.is_challenge || false,
                             is_master:       existing.is_master || false,
                             master_category: existing.master_match?.season?.category ?? null,
