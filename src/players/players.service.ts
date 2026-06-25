@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from '../challenges/challenge-rules.service';
@@ -67,8 +72,8 @@ export const FULL_PLAYER_SELECT = {
 export class PlayersService {
   constructor(
     private prisma: PrismaService,
-    private challengeRules: ChallengeRulesService
-  ) { }
+    private challengeRules: ChallengeRulesService,
+  ) {}
 
   async findAll() {
     // Endpoint público (@Public): se exponen solo campos no sensibles.
@@ -92,30 +97,30 @@ export class PlayersService {
         extra_high_demand_slots: true,
         school_names: true,
         user: {
-          select: { username: true, is_admin: true, admin_role: true }
+          select: { username: true, is_admin: true, admin_role: true },
         },
         challenges_made: {
           where: { status: { in: ['pending', 'accepted'] } },
           orderBy: { created_at: 'desc' },
           take: 1,
           include: {
-            challenged: { select: { id: true, name: true, position: true } }
-          }
+            challenged: { select: { id: true, name: true, position: true } },
+          },
         },
         challenges_received: {
           where: { status: { in: ['pending', 'accepted'] } },
           orderBy: { created_at: 'desc' },
           take: 1,
           include: {
-            challenger: { select: { id: true, name: true, position: true } }
-          }
-        }
-      }
+            challenger: { select: { id: true, name: true, position: true } },
+          },
+        },
+      },
     });
 
     return players
-      .filter(p => !p.user?.is_admin)  // ← excluir admins
-      .map(p => ({
+      .filter((p) => !p.user?.is_admin) // ← excluir admins
+      .map((p) => ({
         ...p,
         is_admin: p.user?.is_admin || false,
         admin_role: p.user?.admin_role || null,
@@ -147,28 +152,32 @@ export class PlayersService {
     const player = await this.prisma.player.findUnique({
       where: { user_id: userId },
       include: {
-        user: { select: { username: true, email: true, is_admin: true } }
-      }
+        user: { select: { username: true, email: true, is_admin: true } },
+      },
     });
 
-    if (!player) throw new NotFoundException(`Jugador con user_id ${userId} no encontrado`);
+    if (!player)
+      throw new NotFoundException(
+        `Jugador con user_id ${userId} no encontrado`,
+      );
 
     return { ...player, is_admin: player.user?.is_admin || false };
   }
 
   async getAvailableChallenges(id: string) {
-    const availablePlayers = await this.challengeRules.getAvailableChallenges(id);
+    const availablePlayers =
+      await this.challengeRules.getAvailableChallenges(id);
 
     return {
       player_id: id,
-      available_challenges: availablePlayers.map(p => ({
+      available_challenges: availablePlayers.map((p) => ({
         id: p.id,
         name: p.name,
         position: p.position,
         level: this.challengeRules.getLevel(p.position),
         wins: p.wins,
-        losses: p.losses
-      }))
+        losses: p.losses,
+      })),
     };
   }
 
@@ -182,14 +191,15 @@ export class PlayersService {
       phone?: string;
       current_password?: string;
       new_password?: string;
-    }
+    },
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { player: true }
+      include: { player: true },
     });
 
-    if (!user || !user.player) throw new NotFoundException('Jugador no encontrado');
+    if (!user || !user.player)
+      throw new NotFoundException('Jugador no encontrado');
 
     const playerUpdate: any = {};
     const userUpdate: any = {};
@@ -200,14 +210,21 @@ export class PlayersService {
     // Cambio de contraseña
     if (data.new_password) {
       if (!data.current_password) {
-        throw new BadRequestException('Debes ingresar tu contraseña actual para cambiarla.');
+        throw new BadRequestException(
+          'Debes ingresar tu contraseña actual para cambiarla.',
+        );
       }
-      const isValid = await bcrypt.compare(data.current_password, user.password_hash);
+      const isValid = await bcrypt.compare(
+        data.current_password,
+        user.password_hash,
+      );
       if (!isValid) {
         throw new BadRequestException('La contraseña actual es incorrecta.');
       }
       if (data.new_password.length < 6) {
-        throw new BadRequestException('La nueva contraseña debe tener al menos 6 caracteres.');
+        throw new BadRequestException(
+          'La nueva contraseña debe tener al menos 6 caracteres.',
+        );
       }
       userUpdate.password_hash = await bcrypt.hash(data.new_password, 10);
     }
@@ -229,12 +246,14 @@ export class PlayersService {
     // Retornar player actualizado
     const updated = await this.prisma.player.findUnique({
       where: { id: user.player.id },
-      include: { user: { select: { username: true, email: true, is_admin: true } } }
+      include: {
+        user: { select: { username: true, email: true, is_admin: true } },
+      },
     });
 
     return {
       message: 'Perfil actualizado correctamente.',
-      player: { ...updated, is_admin: updated?.user?.is_admin || false }
+      player: { ...updated, is_admin: updated?.user?.is_admin || false },
     };
   }
 
@@ -244,34 +263,39 @@ export class PlayersService {
   async uploadAvatar(userId: string, base64Image: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { player: true }
+      include: { player: true },
     });
 
-    if (!user || !user.player) throw new NotFoundException('Jugador no encontrado');
+    if (!user || !user.player)
+      throw new NotFoundException('Jugador no encontrado');
 
     const avatarUrl = await uploadAvatar(base64Image, user.player.id);
 
     await this.prisma.player.update({
       where: { id: user.player.id },
-      data: { avatar_url: avatarUrl }
+      data: { avatar_url: avatarUrl },
     });
 
-    return { message: 'Avatar actualizado correctamente.', avatar_url: avatarUrl };
+    return {
+      message: 'Avatar actualizado correctamente.',
+      avatar_url: avatarUrl,
+    };
   }
 
   async deleteAvatar(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { player: true }
+      include: { player: true },
     });
 
-    if (!user || !user.player) throw new NotFoundException('Jugador no encontrado');
+    if (!user || !user.player)
+      throw new NotFoundException('Jugador no encontrado');
 
     await deleteAvatar(user.player.id);
 
     await this.prisma.player.update({
       where: { id: user.player.id },
-      data: { avatar_url: null }
+      data: { avatar_url: null },
     });
 
     return { message: 'Foto eliminada correctamente.' };

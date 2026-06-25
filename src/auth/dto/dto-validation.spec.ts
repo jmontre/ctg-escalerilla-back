@@ -7,20 +7,26 @@ describe('DTOs de auth', () => {
   it('LoginDto rechaza payload sin password', async () => {
     const dto = plainToInstance(LoginDto, { username: 'javier' });
     const errors = await validate(dto);
-    expect(errors.some(e => e.property === 'password')).toBe(true);
+    expect(errors.some((e) => e.property === 'password')).toBe(true);
   });
 
   it('LoginDto acepta payload completo', async () => {
-    const dto = plainToInstance(LoginDto, { username: 'javier', password: 'secreto' });
+    const dto = plainToInstance(LoginDto, {
+      username: 'javier',
+      password: 'secreto',
+    });
     expect(await validate(dto)).toHaveLength(0);
   });
 
   it('RegisterDto rechaza email inválido y password corta', async () => {
     const dto = plainToInstance(RegisterDto, {
-      username: 'nuevo', email: 'no-es-email', password: '123', name: 'Nuevo',
+      username: 'nuevo',
+      email: 'no-es-email',
+      password: '123',
+      name: 'Nuevo',
     });
     const errors = await validate(dto);
-    expect(errors.some(e => e.property === 'email')).toBe(true);
-    expect(errors.some(e => e.property === 'password')).toBe(true);
+    expect(errors.some((e) => e.property === 'email')).toBe(true);
+    expect(errors.some((e) => e.property === 'password')).toBe(true);
   });
 });

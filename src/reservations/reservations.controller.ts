@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Headers,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
 import { JwtService } from '@nestjs/jwt';
 import { Admin } from '../auth/admin.decorator';
@@ -13,7 +24,8 @@ export class ReservationsController {
   ) {}
 
   private getUserId(auth: string): string {
-    if (!auth?.startsWith('Bearer ')) throw new UnauthorizedException('Token no proporcionado');
+    if (!auth?.startsWith('Bearer '))
+      throw new UnauthorizedException('Token no proporcionado');
     try {
       const payload = this.jwtService.verify(auth.split(' ')[1]);
       return payload.sub;
@@ -30,8 +42,21 @@ export class ReservationsController {
 
   @Admin()
   @Post('blocks')
-  setBlocks(@Body() body: { court_id: string; date: string; slots: string[]; reason?: string }) {
-    return this.reservationsService.setBlocks(body.court_id, body.date, body.slots, body.reason);
+  setBlocks(
+    @Body()
+    body: {
+      court_id: string;
+      date: string;
+      slots: string[];
+      reason?: string;
+    },
+  ) {
+    return this.reservationsService.setBlocks(
+      body.court_id,
+      body.date,
+      body.slots,
+      body.reason,
+    );
   }
 
   @Admin()
@@ -41,7 +66,9 @@ export class ReservationsController {
   }
 
   @Get('courts')
-  getCourts() { return this.reservationsService.getCourts(); }
+  getCourts() {
+    return this.reservationsService.getCourts();
+  }
 
   @Public()
   @Get('availability')
@@ -51,7 +78,9 @@ export class ReservationsController {
   }
 
   @Get('season')
-  getSeason() { return this.reservationsService.getSeason().then(season => ({ season })); }
+  getSeason() {
+    return this.reservationsService.getSeason().then((season) => ({ season }));
+  }
 
   @Admin()
   @Post('season')
@@ -73,8 +102,19 @@ export class ReservationsController {
 
   @Admin()
   @Post('light-config')
-  setLightConfig(@Body() body: { date: string; time_slots: string[]; amount_per_slot: number }) {
-    return this.reservationsService.setLightConfig(body.date, body.time_slots, body.amount_per_slot);
+  setLightConfig(
+    @Body()
+    body: {
+      date: string;
+      time_slots: string[];
+      amount_per_slot: number;
+    },
+  ) {
+    return this.reservationsService.setLightConfig(
+      body.date,
+      body.time_slots,
+      body.amount_per_slot,
+    );
   }
 
   @Admin()
@@ -97,14 +137,17 @@ export class ReservationsController {
 
   @Admin()
   @Get()
-  getAllReservations(@Query('date') date?: string, @Query('month') month?: string) {
+  getAllReservations(
+    @Query('date') date?: string,
+    @Query('month') month?: string,
+  ) {
     return this.reservationsService.getAllReservations(date, month);
   }
 
   @Post()
   create(
     @Headers('authorization') auth: string,
-    @Body() body: CreateReservationDto
+    @Body() body: CreateReservationDto,
   ) {
     const userId = this.getUserId(auth);
     return this.reservationsService.create(userId, body);
@@ -114,7 +157,7 @@ export class ReservationsController {
   modify(
     @Headers('authorization') auth: string,
     @Param('id') id: string,
-    @Body() body: CreateReservationDto
+    @Body() body: CreateReservationDto,
   ) {
     const userId = this.getUserId(auth);
     return this.reservationsService.modify(userId, id, body);

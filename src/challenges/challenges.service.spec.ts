@@ -2,10 +2,18 @@ import { BadRequestException } from '@nestjs/common';
 import { ChallengesService } from './challenges.service';
 
 jest.mock('../notifications/whatsapp.service', () => ({
-  whatsappService: { sendMessage: jest.fn(), sendGroupMessage: jest.fn(), sendAcceptedNotification: jest.fn(), sendChallengeNotification: jest.fn() },
+  whatsappService: {
+    sendMessage: jest.fn(),
+    sendGroupMessage: jest.fn(),
+    sendAcceptedNotification: jest.fn(),
+    sendChallengeNotification: jest.fn(),
+  },
 }));
 jest.mock('../notifications/email.service', () => ({
-  emailService: { sendAcceptedNotification: jest.fn(), sendChallengeNotification: jest.fn() },
+  emailService: {
+    sendAcceptedNotification: jest.fn(),
+    sendChallengeNotification: jest.fn(),
+  },
 }));
 
 describe('ChallengesService.accept', () => {
@@ -17,8 +25,12 @@ describe('ChallengesService.accept', () => {
   function build(updateManyCount: number) {
     const future = new Date(Date.now() + 60 * 60 * 1000);
     const challenge = {
-      id: 'c1', challenger_id: 'p1', challenged_id: 'p2',
-      status: 'pending', accept_deadline: future, ...basePlayers,
+      id: 'c1',
+      challenger_id: 'p1',
+      challenged_id: 'p2',
+      status: 'pending',
+      accept_deadline: future,
+      ...basePlayers,
     };
     const prisma: any = {
       challenge: {
@@ -33,7 +45,9 @@ describe('ChallengesService.accept', () => {
 
   it('falla si otro proceso ya cambió el estado (claim count 0)', async () => {
     const { service } = build(0);
-    await expect(service.accept('c1', 'p2')).rejects.toThrow(BadRequestException);
+    await expect(service.accept('c1', 'p2')).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('acepta cuando el claim gana (count 1)', async () => {

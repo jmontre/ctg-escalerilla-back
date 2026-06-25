@@ -6,10 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { jwtModuleOptions } from '../auth/jwt.config';
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.registerAsync(jwtModuleOptions),
-  ],
+  imports: [PrismaModule, JwtModule.registerAsync(jwtModuleOptions)],
   controllers: [MasterController],
   providers: [MasterService],
   exports: [MasterService],

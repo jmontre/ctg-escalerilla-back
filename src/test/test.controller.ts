@@ -23,13 +23,13 @@ export class TestController {
     console.log('WHATSAPP_GROUP_ID:', process.env.WHATSAPP_GROUP_ID);
     console.log('WhatsApp ready:', whatsappService.isReady());
     const result = await whatsappService.sendGroupMessage(
-      process.env.WHATSAPP_GROUP_ID!,
-      body.message
+      process.env.WHATSAPP_GROUP_ID,
+      body.message,
     );
     return {
       success: result,
       groupId: process.env.WHATSAPP_GROUP_ID,
-      whatsappReady: whatsappService.isReady()
+      whatsappReady: whatsappService.isReady(),
     };
   }
 }

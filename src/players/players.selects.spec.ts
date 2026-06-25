@@ -3,7 +3,14 @@ import { CHALLENGE_PLAYER_SELECT } from '../challenges/challenges.service';
 import { MASTER_PUBLIC_PLAYER_SELECT } from '../master/master.service';
 
 describe('Player select allowlists', () => {
-  const PII_FIELDS = ['email', 'phone', 'has_debt', 'user_id', 'parent_id', 'extra_high_demand_slots'];
+  const PII_FIELDS = [
+    'email',
+    'phone',
+    'has_debt',
+    'user_id',
+    'parent_id',
+    'extra_high_demand_slots',
+  ];
 
   describe('PUBLIC_PLAYER_SELECT (players)', () => {
     it('no expone campos PII a terceros autenticados', () => {
@@ -25,11 +32,21 @@ describe('Player select allowlists', () => {
     });
 
     it('incluye email en el select anidado de user (override correcto sobre PUBLIC)', () => {
-      expect((FULL_PLAYER_SELECT.user as any).select).toHaveProperty('email', true);
+      expect((FULL_PLAYER_SELECT.user as any).select).toHaveProperty(
+        'email',
+        true,
+      );
     });
 
     it('no filtra los campos públicos al extender PUBLIC', () => {
-      const publicOnlyFields = ['id', 'name', 'position', 'wins', 'losses', 'avatar_url'];
+      const publicOnlyFields = [
+        'id',
+        'name',
+        'position',
+        'wins',
+        'losses',
+        'avatar_url',
+      ];
       for (const field of publicOnlyFields) {
         expect(FULL_PLAYER_SELECT).toHaveProperty(field, true);
       }

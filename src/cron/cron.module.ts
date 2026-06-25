@@ -4,10 +4,8 @@ import { CronController } from './cron.controller';
 import { ChallengesModule } from '../challenges/challenges.module';
 
 @Module({
-  imports: [
-    ChallengesModule
-  ],
+  imports: [ChallengesModule],
   controllers: [CronController],
-  providers: [ChallengesCronService]
+  providers: [ChallengesCronService],
 })
 export class CronModule {}

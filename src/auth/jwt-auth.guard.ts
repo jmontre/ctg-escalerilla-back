@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from './public.decorator';
@@ -18,15 +23,28 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest();
-    const auth: string | undefined = request.headers?.authorization;
-    if (!auth?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Token no proporcionado');
-    }
+    const token = this.extractToken(request);
+    if (!token) throw new UnauthorizedException('Token no proporcionado');
     try {
-      request.user = this.jwtService.verify(auth.slice(7));
+      request.user = this.jwtService.verify(token);
       return true;
     } catch {
       throw new UnauthorizedException('Token inválido o expirado');
     }
+  }
+
+  private extractToken(request: any): string | undefined {
+    const auth: string | undefined = request.headers?.authorization;
+    if (auth?.startsWith('Bearer ')) return auth.slice(7);
+
+    // Fallback: cookie httpOnly (cross-origin prod: SameSite=None; dev: SameSite=Lax)
+    const cookieHeader: string = request.headers?.cookie || '';
+    for (const part of cookieHeader.split(';')) {
+      const eqIdx = part.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = part.slice(0, eqIdx).trim();
+      if (key === 'auth_token') return part.slice(eqIdx + 1).trim();
+    }
+    return undefined;
   }
 }

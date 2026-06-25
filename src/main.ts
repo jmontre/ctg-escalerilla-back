@@ -6,13 +6,14 @@ import { ChileLogger } from './common/chile-logger';
 import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: new ChileLogger() });
+  const app = await NestFactory.create(AppModule, {
+    logger: new ChileLogger(),
+  });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   // Aumentar límite para subida de imágenes en base64
   app.use(bodyParser.json({ limit: '10mb' }));
-  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
   const port = process.env.PORT || 3000;
 
@@ -27,7 +28,11 @@ async function bootstrap() {
       ].filter(Boolean);
       // Permitir requests sin origin (mobile apps, Postman, etc.)
       // y todos los preview deployments de Vercel
-      if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+      if (
+        !origin ||
+        allowed.includes(origin) ||
+        origin.endsWith('.vercel.app')
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: origen no permitido: ${origin}`));

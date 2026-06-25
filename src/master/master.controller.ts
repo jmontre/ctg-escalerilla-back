@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Headers,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { MasterService } from './master.service';
 import { JwtService } from '@nestjs/jwt';
 import { Admin } from '../auth/admin.decorator';
@@ -12,7 +22,8 @@ export class MasterController {
   ) {}
 
   private getUserId(auth: string): string {
-    if (!auth?.startsWith('Bearer ')) throw new UnauthorizedException('Token no proporcionado');
+    if (!auth?.startsWith('Bearer '))
+      throw new UnauthorizedException('Token no proporcionado');
     try {
       const payload = this.jwtService.verify(auth.split(' ')[1]);
       return payload.sub;
@@ -23,7 +34,9 @@ export class MasterController {
 
   @Public()
   @Get()
-  findAll() { return this.masterService.findAll(); }
+  findAll() {
+    return this.masterService.findAll();
+  }
 
   @Public()
   @Get(':category')
@@ -33,11 +46,20 @@ export class MasterController {
 
   @Admin()
   @Post('generate')
-  generate(@Body() body: {
-    category: string; name: string;
-    round_robin_start?: string; round_robin_end?: string; final_date?: string;
-  }) {
-    return this.masterService.generateMaster({ ...body, category: body.category.toUpperCase() });
+  generate(
+    @Body()
+    body: {
+      category: string;
+      name: string;
+      round_robin_start?: string;
+      round_robin_end?: string;
+      final_date?: string;
+    },
+  ) {
+    return this.masterService.generateMaster({
+      ...body,
+      category: body.category.toUpperCase(),
+    });
   }
 
   /**
@@ -48,10 +70,15 @@ export class MasterController {
   scheduleMatch(
     @Param('id') id: string,
     @Headers('authorization') auth: string,
-    @Body() body: { scheduled_date: string; court_id?: string }
+    @Body() body: { scheduled_date: string; court_id?: string },
   ) {
     const userId = this.getUserId(auth);
-    return this.masterService.scheduleMatch(id, userId, new Date(body.scheduled_date), body.court_id);
+    return this.masterService.scheduleMatch(
+      id,
+      userId,
+      new Date(body.scheduled_date),
+      body.court_id,
+    );
   }
 
   /**
@@ -62,10 +89,13 @@ export class MasterController {
   submitPlayerResult(
     @Param('id') id: string,
     @Headers('authorization') auth: string,
-    @Body() body: { winner_id: string; score: string }
+    @Body() body: { winner_id: string; score: string },
   ) {
     const userId = this.getUserId(auth);
-    return this.masterService.submitPlayerResult(id, userId, { winnerId: body.winner_id, score: body.score });
+    return this.masterService.submitPlayerResult(id, userId, {
+      winnerId: body.winner_id,
+      score: body.score,
+    });
   }
 
   /**
@@ -76,7 +106,7 @@ export class MasterController {
   @Post('matches/:id/result')
   submitResult(
     @Param('id') id: string,
-    @Body() body: { winner_id: string; score: string }
+    @Body() body: { winner_id: string; score: string },
   ) {
     return this.masterService.submitResult(id, body.winner_id, body.score);
   }

@@ -5,30 +5,30 @@ import { add } from 'date-fns';
 
 @Injectable()
 export class ChallengeRulesService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   /**
    * HELPER: Calcular nivel según posición
    */
   getLevel(position: number): number {
-    if (position === 1) return 1;        // Nivel 1: pos 1
-    if (position <= 4) return 2;         // Nivel 2: pos 2-4
-    if (position <= 8) return 3;         // Nivel 3: pos 5-8
-    if (position <= 12) return 4;        // Nivel 4: pos 9-12
-    if (position <= 15) return 5;        // Nivel 5: pos 13-15
-    if (position <= 19) return 6;        // Nivel 6: pos 16-19
-    if (position <= 24) return 7;        // Nivel 7: pos 20-24
-    if (position <= 27) return 8;        // Nivel 8: pos 25-27
-    if (position <= 31) return 9;        // Nivel 9: pos 28-31
-    if (position <= 36) return 10;       // Nivel 10: pos 32-36
-    if (position <= 39) return 11;       // Nivel 11: pos 37-39
-    if (position <= 43) return 12;       // Nivel 12: pos 40-43
-    return 13;                           // Nivel 13: pos 44-48
+    if (position === 1) return 1; // Nivel 1: pos 1
+    if (position <= 4) return 2; // Nivel 2: pos 2-4
+    if (position <= 8) return 3; // Nivel 3: pos 5-8
+    if (position <= 12) return 4; // Nivel 4: pos 9-12
+    if (position <= 15) return 5; // Nivel 5: pos 13-15
+    if (position <= 19) return 6; // Nivel 6: pos 16-19
+    if (position <= 24) return 7; // Nivel 7: pos 20-24
+    if (position <= 27) return 8; // Nivel 8: pos 25-27
+    if (position <= 31) return 9; // Nivel 9: pos 28-31
+    if (position <= 36) return 10; // Nivel 10: pos 32-36
+    if (position <= 39) return 11; // Nivel 11: pos 37-39
+    if (position <= 43) return 12; // Nivel 12: pos 40-43
+    return 13; // Nivel 13: pos 44-48
   }
 
   /**
- * REGLA 1: Puede desafiar mismo nivel (si está adelante) O 1 nivel arriba
- */
+   * REGLA 1: Puede desafiar mismo nivel (si está adelante) O 1 nivel arriba
+   */
   private validateLevel(challenger: Player, challenged: Player): void {
     const challengerLevel = this.getLevel(challenger.position);
     const challengedLevel = this.getLevel(challenged.position);
@@ -37,7 +37,7 @@ export class ChallengeRulesService {
     if (challengerLevel === challengedLevel) {
       if (challenged.position >= challenger.position) {
         throw new BadRequestException(
-          `No puedes desafiar a ${challenged.name}. Solo puedes desafiar jugadores adelante tuyo en el mismo nivel.`
+          `No puedes desafiar a ${challenged.name}. Solo puedes desafiar jugadores adelante tuyo en el mismo nivel.`,
         );
       }
       // Válido: mismo nivel y desafiado está adelante
@@ -48,7 +48,7 @@ export class ChallengeRulesService {
     if (challengedLevel !== challengerLevel - 1) {
       throw new BadRequestException(
         `Solo puedes desafiar jugadores del nivel inmediatamente superior. ` +
-        `Tú estás en nivel ${challengerLevel}, ${challenged.name} está en nivel ${challengedLevel}.`
+          `Tú estás en nivel ${challengerLevel}, ${challenged.name} está en nivel ${challengedLevel}.`,
       );
     }
   }
@@ -57,28 +57,29 @@ export class ChallengeRulesService {
    * REGLA 2: Verificar que un jugador NO esté "ocupado"
    * (tiene desafío pendiente como challenger O challenged)
    */
-  private async validateNotOccupied(playerId: string, playerName: string): Promise<void> {
+  private async validateNotOccupied(
+    playerId: string,
+    playerName: string,
+  ): Promise<void> {
     const occupiedChallenge = await this.prisma.challenge.findFirst({
       where: {
-        OR: [
-          { challenger_id: playerId },
-          { challenged_id: playerId }
-        ],
-        status: { in: ['pending', 'accepted'] }
+        OR: [{ challenger_id: playerId }, { challenged_id: playerId }],
+        status: { in: ['pending', 'accepted'] },
       },
       include: {
         challenger: true,
-        challenged: true
-      }
+        challenged: true,
+      },
     });
 
     if (occupiedChallenge) {
-      const otherPlayer = occupiedChallenge.challenger_id === playerId
-        ? occupiedChallenge.challenged.name
-        : occupiedChallenge.challenger.name;
+      const otherPlayer =
+        occupiedChallenge.challenger_id === playerId
+          ? occupiedChallenge.challenged.name
+          : occupiedChallenge.challenger.name;
 
       throw new BadRequestException(
-        `${playerName} ya tiene un desafío pendiente con ${otherPlayer}`
+        `${playerName} ya tiene un desafío pendiente con ${otherPlayer}`,
       );
     }
   }
@@ -89,11 +90,11 @@ export class ChallengeRulesService {
   private validateImmunity(challenged: Player): void {
     if (challenged.immune_until && challenged.immune_until > new Date()) {
       const hoursLeft = Math.ceil(
-        (challenged.immune_until.getTime() - Date.now()) / (1000 * 60 * 60)
+        (challenged.immune_until.getTime() - Date.now()) / (1000 * 60 * 60),
       );
 
       throw new BadRequestException(
-        `${challenged.name} tiene inmunidad por ${hoursLeft} hora(s) más`
+        `${challenged.name} tiene inmunidad por ${hoursLeft} hora(s) más`,
       );
     }
   }
@@ -103,12 +104,12 @@ export class ChallengeRulesService {
    */
   async validateChallenge(
     challengerId: string,
-    challengedId: string
+    challengedId: string,
   ): Promise<{ challenger: Player; challenged: Player }> {
     // Obtener jugadores
     const [challenger, challenged] = await Promise.all([
       this.prisma.player.findUnique({ where: { id: challengerId } }),
-      this.prisma.player.findUnique({ where: { id: challengedId } })
+      this.prisma.player.findUnique({ where: { id: challengedId } }),
     ]);
 
     if (!challenger || !challenged) {
@@ -137,11 +138,11 @@ export class ChallengeRulesService {
   }
 
   /**
-    * Obtener jugadores que un jugador puede desafiar
-    */
+   * Obtener jugadores que un jugador puede desafiar
+   */
   async getAvailableChallenges(playerId: string): Promise<Player[]> {
     const player = await this.prisma.player.findUnique({
-      where: { id: playerId }
+      where: { id: playerId },
     });
 
     if (!player) {
@@ -151,12 +152,9 @@ export class ChallengeRulesService {
     // Verificar que el jugador no esté ocupado
     const isOccupied = await this.prisma.challenge.findFirst({
       where: {
-        OR: [
-          { challenger_id: playerId },
-          { challenged_id: playerId }
-        ],
-        status: { in: ['pending', 'accepted'] }
-      }
+        OR: [{ challenger_id: playerId }, { challenged_id: playerId }],
+        status: { in: ['pending', 'accepted'] },
+      },
     });
 
     if (isOccupied) {
@@ -172,7 +170,7 @@ export class ChallengeRulesService {
 
     // Obtener todos los jugadores del nivel superior
     const allPlayers = await this.prisma.player.findMany({
-      orderBy: { position: 'asc' }
+      orderBy: { position: 'asc' },
     });
 
     // Tipar correctamente el array
@@ -183,12 +181,9 @@ export class ChallengeRulesService {
         // Verificar que no esté ocupado
         const occupied = await this.prisma.challenge.findFirst({
           where: {
-            OR: [
-              { challenger_id: p.id },
-              { challenged_id: p.id }
-            ],
-            status: { in: ['pending', 'accepted'] }
-          }
+            OR: [{ challenger_id: p.id }, { challenged_id: p.id }],
+            status: { in: ['pending', 'accepted'] },
+          },
         });
 
         // Verificar que no tenga inmunidad
@@ -208,8 +203,12 @@ export class ChallengeRulesService {
    * El ganador sube a la posición del perdedor, todos entre ellos bajan 1
    */
   async processWin(challengeId: string, winnerId: string, loserId: string) {
-    const winner = await this.prisma.player.findUnique({ where: { id: winnerId } });
-    const loser = await this.prisma.player.findUnique({ where: { id: loserId } });
+    const winner = await this.prisma.player.findUnique({
+      where: { id: winnerId },
+    });
+    const loser = await this.prisma.player.findUnique({
+      where: { id: loserId },
+    });
 
     if (!winner || !loser) {
       throw new BadRequestException('Jugador no encontrado');
@@ -224,17 +223,19 @@ export class ChallengeRulesService {
     const targetPosition = loser.position;
     const oldWinnerPosition = winner.position;
 
-    console.log(`📍 Moviendo ${winner.name}: ${oldWinnerPosition} → ${targetPosition}`);
+    console.log(
+      `📍 Moviendo ${winner.name}: ${oldWinnerPosition} → ${targetPosition}`,
+    );
 
     // Obtener todos los jugadores entre las posiciones (inclusive)
     const affectedPlayers = await this.prisma.player.findMany({
       where: {
         position: {
-          gte: targetPosition,    // Desde la posición del perdedor
-          lt: oldWinnerPosition   // Hasta antes de la posición del ganador
-        }
+          gte: targetPosition, // Desde la posición del perdedor
+          lt: oldWinnerPosition, // Hasta antes de la posición del ganador
+        },
       },
-      orderBy: { position: 'desc' }  // ← IMPORTANTE: Orden descendente
+      orderBy: { position: 'desc' }, // ← IMPORTANTE: Orden descendente
     });
 
     console.log(`📍 Jugadores afectados: ${affectedPlayers.length}`);
@@ -243,43 +244,55 @@ export class ChallengeRulesService {
     // pivot 9999 libera la posición del ganador y cada update entra a un
     // hueco recién liberado).
     await this.prisma.$transaction([
-      ...affectedPlayers.map(player =>
+      ...affectedPlayers.map((player) =>
         this.prisma.rankingHistory.create({
           data: {
-            player_id:    player.id,
+            player_id: player.id,
             old_position: player.position,
-            position:     player.position + 1,
-            reason:       'challenge_lost',
+            position: player.position + 1,
+            reason: 'challenge_lost',
           },
         }),
       ),
       this.prisma.rankingHistory.create({
         data: {
-          player_id:    winner.id,
+          player_id: winner.id,
           old_position: oldWinnerPosition,
-          position:     targetPosition,
-          reason:       'challenge_won',
+          position: targetPosition,
+          reason: 'challenge_won',
         },
       }),
-      this.prisma.player.update({ where: { id: winner.id }, data: { position: 9999 } }),
-      ...affectedPlayers.map(player =>
+      this.prisma.player.update({
+        where: { id: winner.id },
+        data: { position: 9999 },
+      }),
+      ...affectedPlayers.map((player) =>
         this.prisma.player.update({
           where: { id: player.id },
-          data:  { position: player.position + 1 },
+          data: { position: player.position + 1 },
         }),
       ),
-      this.prisma.player.update({ where: { id: winner.id }, data: { position: targetPosition } }),
+      this.prisma.player.update({
+        where: { id: winner.id },
+        data: { position: targetPosition },
+      }),
     ]);
 
-    console.log(`✅ Corrimiento: ${winner.name} (${oldWinnerPosition} → ${targetPosition})`);
+    console.log(
+      `✅ Corrimiento: ${winner.name} (${oldWinnerPosition} → ${targetPosition})`,
+    );
   }
 
   /**
-    * REGLA 4: Aplicar inmunidad y vulnerabilidad post-partido
-    */
+   * REGLA 4: Aplicar inmunidad y vulnerabilidad post-partido
+   */
   async applyPostMatchStatus(winnerId: string, loserId: string) {
-    const winner = await this.prisma.player.findUnique({ where: { id: winnerId } });
-    const loser = await this.prisma.player.findUnique({ where: { id: loserId } });
+    const winner = await this.prisma.player.findUnique({
+      where: { id: winnerId },
+    });
+    const loser = await this.prisma.player.findUnique({
+      where: { id: loserId },
+    });
 
     if (!winner || !loser) {
       throw new BadRequestException('Jugador no encontrado');
@@ -290,10 +303,12 @@ export class ChallengeRulesService {
       await this.prisma.player.update({
         where: { id: winnerId },
         data: {
-          immune_until: add(new Date(), { hours: 24 })
-        }
+          immune_until: add(new Date(), { hours: 24 }),
+        },
       });
-      console.log(`🛡️  ${winner.name} tiene inmunidad por 24 hrs (pos ${winner.position})`);
+      console.log(
+        `🛡️  ${winner.name} tiene inmunidad por 24 hrs (pos ${winner.position})`,
+      );
     } else {
       console.log(`👑 ${winner.name} es #1 - SIN inmunidad`);
     }
@@ -302,8 +317,8 @@ export class ChallengeRulesService {
     await this.prisma.player.update({
       where: { id: loserId },
       data: {
-        vulnerable_until: add(new Date(), { hours: 24 })
-      }
+        vulnerable_until: add(new Date(), { hours: 24 }),
+      },
     });
     console.log(`⚠️  ${loser.name} vulnerable por 24 hrs`);
   }
@@ -313,13 +328,16 @@ export class ChallengeRulesService {
    * (solo puede RECIBIR desafíos, no crear)
    */
   private validateNotVulnerable(challenger: Player): void {
-    if (challenger.vulnerable_until && challenger.vulnerable_until > new Date()) {
+    if (
+      challenger.vulnerable_until &&
+      challenger.vulnerable_until > new Date()
+    ) {
       const hoursLeft = Math.ceil(
-        (challenger.vulnerable_until.getTime() - Date.now()) / (1000 * 60 * 60)
+        (challenger.vulnerable_until.getTime() - Date.now()) / (1000 * 60 * 60),
       );
 
       throw new BadRequestException(
-        `No puedes desafiar mientras estés vulnerable. Podrás desafiar de nuevo en ${hoursLeft} hora(s).`
+        `No puedes desafiar mientras estés vulnerable. Podrás desafiar de nuevo en ${hoursLeft} hora(s).`,
       );
     }
   }
@@ -332,16 +350,16 @@ export class ChallengeRulesService {
       where: { id: winnerId },
       data: {
         total_matches: { increment: 1 },
-        wins: { increment: 1 }
-      }
+        wins: { increment: 1 },
+      },
     });
 
     await this.prisma.player.update({
       where: { id: loserId },
       data: {
         total_matches: { increment: 1 },
-        losses: { increment: 1 }
-      }
+        losses: { increment: 1 },
+      },
     });
   }
 }

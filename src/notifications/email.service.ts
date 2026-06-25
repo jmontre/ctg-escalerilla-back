@@ -17,7 +17,7 @@ export class EmailService {
   async sendChallengeNotification(
     challengerName: string,
     challengedName: string,
-    challengedEmail: string
+    challengedEmail: string,
   ) {
     try {
       await this.resend.emails.send({
@@ -66,7 +66,7 @@ export class EmailService {
   async sendAcceptedNotification(
     challengerName: string,
     challengedName: string,
-    challengerEmail: string
+    challengerEmail: string,
   ) {
     try {
       await this.resend.emails.send({
@@ -109,7 +109,10 @@ export class EmailService {
       });
       return true;
     } catch (error) {
-      console.error('❌ Error al enviar email:', JSON.stringify(error, null, 2));
+      console.error(
+        '❌ Error al enviar email:',
+        JSON.stringify(error, null, 2),
+      );
       console.error('❌ Message:', error?.message);
       console.error('❌ Name:', error?.name);
       return false;
@@ -119,7 +122,7 @@ export class EmailService {
   async sendRejectedNotification(
     challengerName: string,
     challengedName: string,
-    challengerEmail: string
+    challengerEmail: string,
   ) {
     try {
       await this.resend.emails.send({
@@ -170,7 +173,7 @@ export class EmailService {
     playerEmail: string,
     score: string,
     won: boolean,
-    newPosition: number
+    newPosition: number,
   ) {
     try {
       const subject = won
@@ -191,10 +194,11 @@ export class EmailService {
                 Hola <strong>${playerName}</strong>,
               </p>
               <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
-                ${won
-            ? `¡Felicidades! Ganaste el partido contra <strong>${opponentName}</strong>.`
-            : `El resultado del partido contra <strong>${opponentName}</strong> ha sido confirmado.`
-          }
+                ${
+                  won
+                    ? `¡Felicidades! Ganaste el partido contra <strong>${opponentName}</strong>.`
+                    : `El resultado del partido contra <strong>${opponentName}</strong> ha sido confirmado.`
+                }
               </p>
               <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
                 <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Resultado</p>

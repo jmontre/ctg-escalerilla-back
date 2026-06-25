@@ -2,7 +2,11 @@ import { BadRequestException } from '@nestjs/common';
 import { MasterService } from './master.service';
 
 jest.mock('../notifications/whatsapp.service', () => ({
-  whatsappService: { sendMessage: jest.fn(), sendGroupMessage: jest.fn(), isReady: () => true },
+  whatsappService: {
+    sendMessage: jest.fn(),
+    sendGroupMessage: jest.fn(),
+    isReady: () => true,
+  },
 }));
 
 describe('MasterService.scheduleMatch', () => {
@@ -10,16 +14,35 @@ describe('MasterService.scheduleMatch', () => {
 
   function build(overrides: any = {}) {
     const match = {
-      id: 'm1', status: 'pending', player1_id: 'p1', player2_id: 'p2',
+      id: 'm1',
+      status: 'pending',
+      player1_id: 'p1',
+      player2_id: 'p2',
       player1: { id: 'p1', name: 'Uno', phone: null },
       player2: { id: 'p2', name: 'Dos', phone: null },
       season: { category: 'A' },
     };
     const prisma: any = {
-      player: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', children: [], member_type: 'socio', extra_high_demand_slots: 0 }) },
-      masterMatch: { findUnique: jest.fn().mockResolvedValue(match), update: jest.fn() },
-      court: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', is_active: true, name: 'Cancha 1' }) },
-      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: 'verano' }) },
+      player: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'p1',
+          children: [],
+          member_type: 'socio',
+          extra_high_demand_slots: 0,
+        }),
+      },
+      masterMatch: {
+        findUnique: jest.fn().mockResolvedValue(match),
+        update: jest.fn(),
+      },
+      court: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'c1', is_active: true, name: 'Cancha 1' }),
+      },
+      systemConfig: {
+        findUnique: jest.fn().mockResolvedValue({ value: 'verano' }),
+      },
       reservation: {
         findFirst: jest.fn().mockResolvedValue(overrides.slotBusy ?? null),
         count: jest.fn().mockResolvedValue(0),
@@ -33,7 +56,9 @@ describe('MasterService.scheduleMatch', () => {
 
   it('rechaza si el slot ya está ocupado', async () => {
     const { service } = build({ slotBusy: { id: 'r9' } });
-    await expect(service.scheduleMatch('m1', 'u1', futureDate, 'c1')).rejects.toThrow(BadRequestException);
+    await expect(
+      service.scheduleMatch('m1', 'u1', futureDate, 'c1'),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('crea la reserva en una transacción cuando el slot está libre', async () => {
@@ -46,6 +71,9 @@ describe('MasterService.scheduleMatch', () => {
     const { service, prisma } = build();
     await service.scheduleMatch('m1', 'u1', futureDate);
     expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.masterMatch.update).toHaveBeenCalledWith({ where: { id: 'm1' }, data: { scheduled_date: futureDate } });
+    expect(prisma.masterMatch.update).toHaveBeenCalledWith({
+      where: { id: 'm1' },
+      data: { scheduled_date: futureDate },
+    });
   });
 });

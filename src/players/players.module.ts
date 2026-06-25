@@ -9,10 +9,7 @@ import { ChallengeRulesService } from '../challenges/challenge-rules.service';
 import { jwtModuleOptions } from '../auth/jwt.config';
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.registerAsync(jwtModuleOptions),
-  ],
+  imports: [PrismaModule, JwtModule.registerAsync(jwtModuleOptions)],
   controllers: [PlayersController, AdminPlayersController],
   providers: [PlayersService, AdminPlayersService, ChallengeRulesService],
   exports: [PlayersService],
