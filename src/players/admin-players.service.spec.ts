@@ -35,12 +35,23 @@ describe('AdminPlayersService.getWeeklyHighDemandUsage', () => {
     expect(where.player_id).toEqual({ in: ['p1', 'h1'] });
     expect(where.OR).toEqual([
       { status: 'active' },
-      { status: 'cancelled', cancel_reason: 'Cancelación tardía - turno descontado' },
+      {
+        status: 'cancelled',
+        cancel_reason: 'Cancelación tardía - turno descontado',
+      },
     ]);
   });
 
   it('hijo_socio tiene límite 1', async () => {
-    const { service } = build({ id: 'h1', member_type: 'hijo_socio', extra_high_demand_slots: 0, children: [] }, 1);
+    const { service } = build(
+      {
+        id: 'h1',
+        member_type: 'hijo_socio',
+        extra_high_demand_slots: 0,
+        children: [],
+      },
+      1,
+    );
     const result = await service.getWeeklyHighDemandUsage('h1');
     expect(result.limit).toBe(1);
     expect(result.remaining).toBe(0);

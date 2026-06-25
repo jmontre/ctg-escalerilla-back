@@ -16,7 +16,7 @@ export class CronController {
     await this.cronService.runManually();
     return {
       message: 'Cron job ejecutado manualmente',
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   }
 }

@@ -8,8 +8,9 @@
 export function nowInChile(): Date {
   const now = new Date();
   return new Date(
-    now.toLocaleDateString('sv', { timeZone: 'America/Santiago' }) + 'T' +
-    now.toLocaleTimeString('sv', { timeZone: 'America/Santiago' }),
+    now.toLocaleDateString('sv', { timeZone: 'America/Santiago' }) +
+      'T' +
+      now.toLocaleTimeString('sv', { timeZone: 'America/Santiago' }),
   );
 }
 
@@ -35,7 +36,10 @@ export function currentChileDate(): string {
  * Produce fechas naive (UTC-midnight representando días Chile) compatibles
  * con los campos @db.Date de Prisma (almacenados como UTC midnight).
  */
-export function chileWeekBoundsFromStr(chileDate: string): { weekStart: Date; weekEnd: Date } {
+export function chileWeekBoundsFromStr(chileDate: string): {
+  weekStart: Date;
+  weekEnd: Date;
+} {
   const d = new Date(`${chileDate}T00:00:00`);
   const weekStart = new Date(d);
   weekStart.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -50,9 +54,12 @@ export function chileWeekBoundsFromStr(chileDate: string): { weekStart: Date; we
  * month es índice 0-based (0 = enero, 11 = diciembre).
  * Reemplaza new Date(year, mon, 1) que usa la zona local del servidor.
  */
-export function monthBoundsUTC(year: number, month: number): { start: Date; end: Date } {
+export function monthBoundsUTC(
+  year: number,
+  month: number,
+): { start: Date; end: Date } {
   return {
     start: new Date(Date.UTC(year, month, 1)),
-    end:   new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999)),
+    end: new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999)),
   };
 }

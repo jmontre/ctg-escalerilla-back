@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
@@ -34,10 +40,10 @@ export class AuthService {
     // Esto evita que cuentas no verificadas contaminen el ranking del club.
     const player = await this.prisma.player.create({
       data: {
-        user_id:  user.id,
-        name:     dto.name,
-        email:    dto.email,
-        phone:    dto.phone,
+        user_id: user.id,
+        name: dto.name,
+        email: dto.email,
+        phone: dto.phone,
         position: null,
       },
     });
@@ -48,13 +54,17 @@ export class AuthService {
     return {
       token,
       user: {
-        id:         user.id,
-        username:   user.username,
-        email:      user.email,
-        is_admin:   user.is_admin,
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        is_admin: user.is_admin,
         admin_role: user.admin_role,
       },
-      player: { ...player, is_admin: user.is_admin, admin_role: user.admin_role },
+      player: {
+        ...player,
+        is_admin: user.is_admin,
+        admin_role: user.admin_role,
+      },
     };
   }
 
@@ -69,7 +79,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.password_hash,
+    );
     if (!isPasswordValid) {
       this.appLogger.loginFailed(dto.username);
       throw new UnauthorizedException('Credenciales incorrectas');
@@ -81,39 +94,49 @@ export class AuthService {
     return {
       token,
       user: {
-        id:         user.id,
-        username:   user.username,
-        email:      user.email,
-        is_admin:   user.is_admin,
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        is_admin: user.is_admin,
         admin_role: user.admin_role,
       },
-      player: { ...user.player, is_admin: user.is_admin, admin_role: user.admin_role },
+      player: {
+        ...user.player,
+        is_admin: user.is_admin,
+        admin_role: user.admin_role,
+      },
     };
   }
 
   async validateToken(token: string) {
     try {
       const payload = this.jwtService.verify(token);
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-        include: { player: true },
-      });
-
-      if (!user) throw new UnauthorizedException('Usuario no encontrado');
-
-      return {
-        user: {
-          id:         user.id,
-          username:   user.username,
-          email:      user.email,
-          is_admin:   user.is_admin,
-          admin_role: user.admin_role,
-        },
-        player: { ...user.player, is_admin: user.is_admin, admin_role: user.admin_role },
-      };
+      return this.validateTokenByUserId(payload.sub);
     } catch {
       throw new UnauthorizedException('Token inválido');
     }
+  }
+
+  async validateTokenByUserId(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { player: true },
+    });
+    if (!user) throw new UnauthorizedException('Usuario no encontrado');
+    return {
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        is_admin: user.is_admin,
+        admin_role: user.admin_role,
+      },
+      player: {
+        ...user.player,
+        is_admin: user.is_admin,
+        admin_role: user.admin_role,
+      },
+    };
   }
 
   async forgotPassword(username: string) {
@@ -123,7 +146,8 @@ export class AuthService {
     });
 
     const genericResponse = {
-      message: 'Si el usuario existe, se enviará un mensaje de WhatsApp con el enlace.',
+      message:
+        'Si el usuario existe, se enviará un mensaje de WhatsApp con el enlace.',
     };
 
     if (!user || !user.player) return genericResponse;
@@ -145,7 +169,8 @@ export class AuthService {
       data: { user_id: user.id, token, expires_at },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl';
+    const frontendUrl =
+      process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl';
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
     whatsappService
@@ -157,24 +182,46 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string) {
-    const resetToken = await this.prisma.passwordResetToken.findUnique({ where: { token } });
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { token },
+    });
 
-    if (!resetToken)          throw new BadRequestException('El enlace no es válido.');
-    if (resetToken.used)      throw new BadRequestException('Este enlace ya fue utilizado.');
-    if (new Date() > resetToken.expires_at) throw new BadRequestException('El enlace ha expirado. Solicita uno nuevo.');
-    if (newPassword.length < 6) throw new BadRequestException('La contraseña debe tener al menos 6 caracteres.');
+    if (!resetToken) throw new BadRequestException('El enlace no es válido.');
+    if (resetToken.used)
+      throw new BadRequestException('Este enlace ya fue utilizado.');
+    if (new Date() > resetToken.expires_at)
+      throw new BadRequestException(
+        'El enlace ha expirado. Solicita uno nuevo.',
+      );
+    if (newPassword.length < 6)
+      throw new BadRequestException(
+        'La contraseña debe tener al menos 6 caracteres.',
+      );
 
     const password_hash = await bcrypt.hash(newPassword, 10);
 
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: resetToken.user_id }, data: { password_hash } }),
-      this.prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { used: true } }),
+      this.prisma.user.update({
+        where: { id: resetToken.user_id },
+        data: { password_hash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { used: true },
+      }),
     ]);
 
-    return { message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' };
+    return {
+      message:
+        'Contraseña actualizada correctamente. Ya puedes iniciar sesión.',
+    };
   }
 
-  private generateToken(userId: string, isAdmin: boolean, adminRole: string | null): string {
+  private generateToken(
+    userId: string,
+    isAdmin: boolean,
+    adminRole: string | null,
+  ): string {
     const payload = { sub: userId, is_admin: isAdmin, admin_role: adminRole };
     return this.jwtService.sign(payload);
   }

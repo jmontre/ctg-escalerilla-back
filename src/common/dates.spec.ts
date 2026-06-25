@@ -35,7 +35,7 @@ describe('chileWeekBoundsFromStr', () => {
   it('returns Monday to Sunday for a Wednesday', () => {
     const { weekStart, weekEnd } = chileWeekBoundsFromStr('2026-05-06');
     expect(localDateStr(weekStart)).toBe('2026-05-04'); // Monday
-    expect(localDateStr(weekEnd)).toBe('2026-05-10');   // Sunday
+    expect(localDateStr(weekEnd)).toBe('2026-05-10'); // Sunday
   });
 
   it('returns same week when date is Monday', () => {

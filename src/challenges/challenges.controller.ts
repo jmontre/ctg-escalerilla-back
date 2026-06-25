@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, BadRequestException, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  BadRequestException,
+  Request,
+} from '@nestjs/common';
 import { ChallengesService } from './challenges.service';
 import { Public } from '../auth/public.decorator';
 
@@ -8,7 +16,7 @@ class CreateChallengeDto {
 
 @Controller('challenges')
 export class ChallengesController {
-  constructor(private readonly challengesService: ChallengesService) { }
+  constructor(private readonly challengesService: ChallengesService) {}
 
   /**
    * POST /challenges
@@ -19,7 +27,9 @@ export class ChallengesController {
     if (!dto.challenged_id) {
       throw new BadRequestException('challenged_id es requerido');
     }
-    const challengerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    const challengerId = await this.challengesService.getPlayerIdFromUserId(
+      req.user.sub,
+    );
     return this.challengesService.create(challengerId, dto.challenged_id);
   }
 
@@ -48,7 +58,9 @@ export class ChallengesController {
    */
   @Post(':id/accept')
   async accept(@Param('id') id: string, @Request() req: any) {
-    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    const playerId = await this.challengesService.getPlayerIdFromUserId(
+      req.user.sub,
+    );
     return this.challengesService.accept(id, playerId);
   }
 
@@ -58,7 +70,9 @@ export class ChallengesController {
    */
   @Post(':id/reject')
   async reject(@Param('id') id: string, @Request() req: any) {
-    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    const playerId = await this.challengesService.getPlayerIdFromUserId(
+      req.user.sub,
+    );
     return this.challengesService.reject(id, playerId);
   }
 
@@ -70,12 +84,14 @@ export class ChallengesController {
   async submitResult(
     @Param('id') id: string,
     @Request() req: any,
-    @Body() body: { winner_id: string; score: string }
+    @Body() body: { winner_id: string; score: string },
   ) {
     if (!body.winner_id || !body.score) {
       throw new BadRequestException('winner_id y score son requeridos');
     }
-    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    const playerId = await this.challengesService.getPlayerIdFromUserId(
+      req.user.sub,
+    );
     return this.challengesService.submitResult(id, playerId, {
       winnerId: body.winner_id,
       score: body.score,
@@ -90,12 +106,14 @@ export class ChallengesController {
   async scheduleMatch(
     @Param('id') id: string,
     @Request() req: any,
-    @Body() body: { scheduled_date: string; court_id?: string }
+    @Body() body: { scheduled_date: string; court_id?: string },
   ) {
     if (!body.scheduled_date) {
       throw new BadRequestException('scheduled_date es requerido');
     }
-    const playerId = await this.challengesService.getPlayerIdFromUserId(req.user.sub);
+    const playerId = await this.challengesService.getPlayerIdFromUserId(
+      req.user.sub,
+    );
     return this.challengesService.scheduleMatch(
       id,
       playerId,

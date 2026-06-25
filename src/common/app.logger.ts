@@ -19,60 +19,129 @@ export class AppLogger {
   }
 
   // ── Reservas ──────────────────────────────────────────────────────────────
-  reservationCreated(player: string, court: string, date: string, slot: string, isHighDemand: boolean, partner?: string, schoolName?: string) {
-    const extra = schoolName ? ` | Escuela: ${schoolName}` : partner ? ` | Con: ${partner}` : '';
+  reservationCreated(
+    player: string,
+    court: string,
+    date: string,
+    slot: string,
+    isHighDemand: boolean,
+    partner?: string,
+    schoolName?: string,
+  ) {
+    const extra = schoolName
+      ? ` | Escuela: ${schoolName}`
+      : partner
+        ? ` | Con: ${partner}`
+        : '';
     const demand = isHighDemand ? ' 🔥' : '';
-    this.logger.log(`📅 RESERVA | ${player} → ${court} | ${date} ${slot}${demand}${extra}`);
+    this.logger.log(
+      `📅 RESERVA | ${player} → ${court} | ${date} ${slot}${demand}${extra}`,
+    );
   }
-  reservationCancelled(player: string, court: string, date: string, slot: string, reason?: string) {
+  reservationCancelled(
+    player: string,
+    court: string,
+    date: string,
+    slot: string,
+    reason?: string,
+  ) {
     const r = reason ? ` | Motivo: ${reason}` : '';
-    this.logger.log(`🚫 CANCELACIÓN | ${player} → ${court} | ${date} ${slot}${r}`);
+    this.logger.log(
+      `🚫 CANCELACIÓN | ${player} → ${court} | ${date} ${slot}${r}`,
+    );
   }
-  reservationAdminCancelled(court: string, date: string, slot: string, reason?: string) {
+  reservationAdminCancelled(
+    court: string,
+    date: string,
+    slot: string,
+    reason?: string,
+  ) {
     const r = reason ? ` | Motivo: ${reason}` : '';
     this.logger.log(`🚫 CANCELACIÓN ADMIN | ${court} | ${date} ${slot}${r}`);
   }
   reservationCompleted(count: number) {
-    if (count > 0) this.logger.log(`✅ RESERVAS COMPLETADAS (cron) | ${count} reservas`);
+    if (count > 0)
+      this.logger.log(`✅ RESERVAS COMPLETADAS (cron) | ${count} reservas`);
   }
 
   // ── Bloqueos ──────────────────────────────────────────────────────────────
   courtBlocked(court: string, date: string, slots: string[], reason?: string) {
     const r = reason ? ` | Motivo: ${reason}` : '';
-    this.logger.log(`🔒 BLOQUEO | ${court} | ${date} | Slots: ${slots.join(', ') || 'día completo'}${r}`);
+    this.logger.log(
+      `🔒 BLOQUEO | ${court} | ${date} | Slots: ${slots.join(', ') || 'día completo'}${r}`,
+    );
   }
   courtUnblocked(court: string, date: string) {
     this.logger.log(`🔓 DESBLOQUEO | ${court} | ${date}`);
   }
 
   // ── Desafíos ──────────────────────────────────────────────────────────────
-  challengeCreated(challenger: string, challenged: string, pos1: number, pos2: number) {
-    this.logger.log(`⚔️  DESAFÍO CREADO | ${challenger} (#${pos1}) → ${challenged} (#${pos2})`);
+  challengeCreated(
+    challenger: string,
+    challenged: string,
+    pos1: number,
+    pos2: number,
+  ) {
+    this.logger.log(
+      `⚔️  DESAFÍO CREADO | ${challenger} (#${pos1}) → ${challenged} (#${pos2})`,
+    );
   }
   challengeAccepted(challenger: string, challenged: string) {
-    this.logger.log(`✅ DESAFÍO ACEPTADO | ${challenged} aceptó a ${challenger}`);
+    this.logger.log(
+      `✅ DESAFÍO ACEPTADO | ${challenged} aceptó a ${challenger}`,
+    );
   }
   challengeRejected(challenger: string, challenged: string) {
-    this.logger.log(`❌ DESAFÍO RECHAZADO | ${challenged} rechazó a ${challenger} → W.O. para ${challenger}`);
+    this.logger.log(
+      `❌ DESAFÍO RECHAZADO | ${challenged} rechazó a ${challenger} → W.O. para ${challenger}`,
+    );
   }
-  challengeScheduled(challenger: string, challenged: string, date: string, court?: string) {
+  challengeScheduled(
+    challenger: string,
+    challenged: string,
+    date: string,
+    court?: string,
+  ) {
     const c = court ? ` | ${court}` : '';
-    this.logger.log(`📅 PARTIDO AGENDADO | ${challenger} vs ${challenged} | ${date}${c}`);
+    this.logger.log(
+      `📅 PARTIDO AGENDADO | ${challenger} vs ${challenged} | ${date}${c}`,
+    );
   }
-  challengeResult(winner: string, loser: string, score: string, newPos1: number, newPos2: number) {
-    this.logger.log(`🏆 RESULTADO | ${winner} (#${newPos1}) venció a ${loser} (#${newPos2}) | ${score}`);
+  challengeResult(
+    winner: string,
+    loser: string,
+    score: string,
+    newPos1: number,
+    newPos2: number,
+  ) {
+    this.logger.log(
+      `🏆 RESULTADO | ${winner} (#${newPos1}) venció a ${loser} (#${newPos2}) | ${score}`,
+    );
   }
-  challengeDisputed(challenger: string, challenged: string, score1: string, score2: string) {
-    this.logger.warn(`⚠️  DISPUTA | ${challenger} dice: ${score1} | ${challenged} dice: ${score2}`);
+  challengeDisputed(
+    challenger: string,
+    challenged: string,
+    score1: string,
+    score2: string,
+  ) {
+    this.logger.warn(
+      `⚠️  DISPUTA | ${challenger} dice: ${score1} | ${challenged} dice: ${score2}`,
+    );
   }
   challengeAutoValidated(winner: string, loser: string, score: string) {
-    this.logger.warn(`⏰ AUTO-VALIDADO | ${winner} venció a ${loser} | ${score} (sin doble confirmación)`);
+    this.logger.warn(
+      `⏰ AUTO-VALIDADO | ${winner} venció a ${loser} | ${score} (sin doble confirmación)`,
+    );
   }
   challengeExpiredNotAccepted(challenger: string, challenged: string) {
-    this.logger.warn(`⏱️  EXPIRADO (no aceptado) | ${challenger} vs ${challenged} → W.O. para ${challenger}`);
+    this.logger.warn(
+      `⏱️  EXPIRADO (no aceptado) | ${challenger} vs ${challenged} → W.O. para ${challenger}`,
+    );
   }
   challengeExpiredNotPlayed(challenger: string, challenged: string) {
-    this.logger.warn(`⏱️  EXPIRADO (no jugado) | ${challenger} vs ${challenged} → penalización`);
+    this.logger.warn(
+      `⏱️  EXPIRADO (no jugado) | ${challenger} vs ${challenged} → penalización`,
+    );
   }
 
   // ── WhatsApp ──────────────────────────────────────────────────────────────
@@ -106,7 +175,9 @@ export class AppLogger {
     this.logger.log(`🏆 MASTER CREADO | ${name} | ${category}`);
   }
   masterResult(winner: string, loser: string, score: string, round: string) {
-    this.logger.log(`🏆 MASTER RESULTADO | ${round} | ${winner} vs ${loser} | ${score}`);
+    this.logger.log(
+      `🏆 MASTER RESULTADO | ${round} | ${winner} vs ${loser} | ${score}`,
+    );
   }
 
   // ── General ───────────────────────────────────────────────────────────────

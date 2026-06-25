@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from './challenge-rules.service';
 
@@ -16,12 +20,18 @@ export class AdminChallengesService {
     });
     if (!challenge) throw new NotFoundException('Desafío no encontrado');
 
-    if (winnerId !== challenge.challenger_id && winnerId !== challenge.challenged_id) {
-      throw new BadRequestException('El ganador debe ser uno de los jugadores del desafío');
+    if (
+      winnerId !== challenge.challenger_id &&
+      winnerId !== challenge.challenged_id
+    ) {
+      throw new BadRequestException(
+        'El ganador debe ser uno de los jugadores del desafío',
+      );
     }
-    const loserId = winnerId === challenge.challenger_id
-      ? challenge.challenged_id
-      : challenge.challenger_id;
+    const loserId =
+      winnerId === challenge.challenger_id
+        ? challenge.challenged_id
+        : challenge.challenger_id;
 
     // Misma lógica que el flujo normal: corrimiento + historial + inmunidad/vulnerabilidad + stats
     await this.rules.processWin(challengeId, winnerId, loserId);
@@ -31,11 +41,11 @@ export class AdminChallengesService {
     const updated = await this.prisma.challenge.update({
       where: { id: challengeId },
       data: {
-        status:      'completed',
-        winner_id:   winnerId,
+        status: 'completed',
+        winner_id: winnerId,
         final_score: score,
         resolved_at: new Date(),
-        played_at:   challenge.played_at || new Date(),
+        played_at: challenge.played_at || new Date(),
       },
       include: { challenger: true, challenged: true },
     });
@@ -43,7 +53,11 @@ export class AdminChallengesService {
     // Liberar la reserva del desafío (igual que processDoubleConfirmation)
     await this.prisma.reservation.updateMany({
       where: { challenge_id: challengeId, status: 'active' },
-      data:  { status: 'cancelled', cancelled_at: new Date(), cancel_reason: 'Partido completado' },
+      data: {
+        status: 'cancelled',
+        cancelled_at: new Date(),
+        cancel_reason: 'Partido completado',
+      },
     });
 
     return updated;
@@ -62,37 +76,43 @@ export class AdminChallengesService {
     // Si estaba completado, revertir estadísticas
     if (challenge.status === 'completed' && challenge.winner_id) {
       const winnerId = challenge.winner_id;
-      const loserId  = winnerId === challenge.challenger_id
-        ? challenge.challenged_id
-        : challenge.challenger_id;
+      const loserId =
+        winnerId === challenge.challenger_id
+          ? challenge.challenged_id
+          : challenge.challenger_id;
 
-      const winner = await this.prisma.player.findUnique({ where: { id: winnerId } });
+      const winner = await this.prisma.player.findUnique({
+        where: { id: winnerId },
+      });
       if (winner && winner.wins > 0 && winner.total_matches > 0) {
         await this.prisma.player.update({
           where: { id: winnerId },
-          data:  { wins: { decrement: 1 }, total_matches: { decrement: 1 } },
+          data: { wins: { decrement: 1 }, total_matches: { decrement: 1 } },
         });
       }
 
-      const loser = await this.prisma.player.findUnique({ where: { id: loserId } });
+      const loser = await this.prisma.player.findUnique({
+        where: { id: loserId },
+      });
       if (loser && loser.losses > 0 && loser.total_matches > 0) {
         await this.prisma.player.update({
           where: { id: loserId },
-          data:  { losses: { decrement: 1 }, total_matches: { decrement: 1 } },
+          data: { losses: { decrement: 1 }, total_matches: { decrement: 1 } },
         });
       }
     }
 
     await this.prisma.challenge.update({
       where: { id: challengeId },
-      data:  { status: 'cancelled', resolved_at: new Date() },
+      data: { status: 'cancelled', resolved_at: new Date() },
     });
 
     return {
       message: 'Desafío cancelado correctamente',
-      note: challenge.status === 'completed'
-        ? 'Estadísticas revertidas. NOTA: Los cambios de ranking NO fueron revertidos automáticamente.'
-        : null,
+      note:
+        challenge.status === 'completed'
+          ? 'Estadísticas revertidas. NOTA: Los cambios de ranking NO fueron revertidos automáticamente.'
+          : null,
     };
   }
 
@@ -116,7 +136,11 @@ export class AdminChallengesService {
     return { message: 'Desafío eliminado permanentemente' };
   }
 
-  async extendDeadline(challengeId: string, hours: number, type: 'accept' | 'play') {
+  async extendDeadline(
+    challengeId: string,
+    hours: number,
+    type: 'accept' | 'play',
+  ) {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id: challengeId },
     });
@@ -139,7 +163,7 @@ export class AdminChallengesService {
 
     const updated = await this.prisma.challenge.update({
       where: { id: challengeId },
-      data:  updateData,
+      data: updateData,
       include: { challenger: true, challenged: true },
     });
 

@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+} from '@nestjs/common';
 import { AdminPlayersService } from './admin-players.service';
 import { Admin } from '../auth/admin.decorator';
 import { CreatePlayerDto, UpdatePlayerDto } from './dto/admin-player.dto';
@@ -20,10 +28,7 @@ export class AdminPlayersController {
   }
 
   @Put(':id')
-  async updatePlayer(
-    @Param('id') id: string,
-    @Body() data: UpdatePlayerDto
-  ) {
+  async updatePlayer(@Param('id') id: string, @Body() data: UpdatePlayerDto) {
     return this.adminService.updatePlayer(id, data);
   }
 
@@ -33,7 +38,10 @@ export class AdminPlayersController {
   }
 
   @Post(':id/move')
-  async movePlayer(@Param('id') id: string, @Body() data: { newPosition: number }) {
+  async movePlayer(
+    @Param('id') id: string,
+    @Body() data: { newPosition: number },
+  ) {
     return this.adminService.movePlayer(id, data.newPosition);
   }
 

@@ -36,7 +36,11 @@ export class WhatsAppService {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           findAndDeleteLocks(fullPath);
-        } else if (['SingletonLock', 'SingletonCookie', 'SingletonSocket'].includes(entry.name)) {
+        } else if (
+          ['SingletonLock', 'SingletonCookie', 'SingletonSocket'].includes(
+            entry.name,
+          )
+        ) {
           fs.unlinkSync(fullPath);
           console.log(`🧹 Eliminado: ${fullPath}`);
         }
@@ -62,13 +66,23 @@ export class WhatsAppService {
     });
 
     this.client.on('qr', (qr) => {
-      console.log('\n╔════════════════════════════════════════════════════════════╗');
-      console.log('║       GENERA TU QR EN https://qr.io                       ║');
-      console.log('╚════════════════════════════════════════════════════════════╝\n');
+      console.log(
+        '\n╔════════════════════════════════════════════════════════════╗',
+      );
+      console.log(
+        '║       GENERA TU QR EN https://qr.io                       ║',
+      );
+      console.log(
+        '╚════════════════════════════════════════════════════════════╝\n',
+      );
       console.log('📋 COPIA ESTE TEXTO COMPLETO:\n');
-      console.log('┌─────────────────────────────────────────────────────────┐');
+      console.log(
+        '┌─────────────────────────────────────────────────────────┐',
+      );
       console.log(qr);
-      console.log('└─────────────────────────────────────────────────────────┘\n');
+      console.log(
+        '└─────────────────────────────────────────────────────────┘\n',
+      );
       console.log('👉 PASOS:');
       console.log('   1. Ve a https://qr.io');
       console.log('   2. Pega el texto de arriba en el campo "Text"');
@@ -104,11 +118,11 @@ export class WhatsAppService {
 
   private formatPhoneNumber(phone: string): string {
     let cleaned = phone.replace(/[\s\-\(\)]/g, '');
-    
+
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
     }
-    
+
     if (!cleaned.startsWith('56')) {
       if (cleaned.startsWith('9')) {
         cleaned = '56' + cleaned;
@@ -116,7 +130,7 @@ export class WhatsAppService {
         console.warn(`⚠️ Número sospechoso: ${phone} -> ${cleaned}`);
       }
     }
-    
+
     console.log(`📱 Formateando: ${phone} -> ${cleaned}@c.us`);
     return cleaned + '@c.us';
   }
@@ -129,19 +143,24 @@ export class WhatsAppService {
 
     try {
       const chatId = this.formatPhoneNumber(phone);
-      
+
       const numberExists = await this.client.isRegisteredUser(chatId);
-      
+
       if (!numberExists) {
-        console.error(`❌ El número ${phone} (${chatId}) NO está registrado en WhatsApp`);
+        console.error(
+          `❌ El número ${phone} (${chatId}) NO está registrado en WhatsApp`,
+        );
         return false;
       }
-      
+
       await this.client.sendMessage(chatId, message);
       console.log(`✅ Mensaje enviado exitosamente a ${phone} (${chatId})`);
       return true;
     } catch (error) {
-      console.error(`❌ Error enviando mensaje a ${phone}:`, error.message || error);
+      console.error(
+        `❌ Error enviando mensaje a ${phone}:`,
+        error.message || error,
+      );
       return false;
     }
   }
@@ -164,7 +183,7 @@ export class WhatsAppService {
         }));
 
       console.log(`📋 Grupos encontrados: ${groups.length}`);
-      groups.forEach(g => console.log(`  - ${g.name}: ${g.id}`));
+      groups.forEach((g) => console.log(`  - ${g.name}: ${g.id}`));
 
       return groups;
     } catch (error) {
@@ -184,7 +203,10 @@ export class WhatsAppService {
       console.log(`✅ Mensaje enviado al grupo ${groupId}`);
       return true;
     } catch (error) {
-      console.error(`❌ Error enviando mensaje al grupo:`, error.message || error);
+      console.error(
+        `❌ Error enviando mensaje al grupo:`,
+        error.message || error,
+      );
       return false;
     }
   }
@@ -199,82 +221,115 @@ export class WhatsAppService {
   ) {
     const groupId = process.env.WHATSAPP_GROUP_ID;
     if (!groupId) {
-      console.log('⚠️ WHATSAPP_GROUP_ID no configurado, omitiendo notificación al grupo');
+      console.log(
+        '⚠️ WHATSAPP_GROUP_ID no configurado, omitiendo notificación al grupo',
+      );
       return false;
     }
 
-    const loserName = winnerName === challengerName ? challengedName : challengerName;
+    const loserName =
+      winnerName === challengerName ? challengedName : challengerName;
 
     return this.sendGroupMessage(
       groupId,
       `🎾 *Club de Tenis Graneros - Resultado*\n\n` +
-      `🏆 *${winnerName}* venció a *${loserName}*\n` +
-      `📊 Score: *${score}*\n\n` +
-      `📈 Nuevas posiciones:\n` +
-      `  • ${winnerName}: #${newWinnerPosition}\n` +
-      `  • ${loserName}: #${newLoserPosition}`
+        `🏆 *${winnerName}* venció a *${loserName}*\n` +
+        `📊 Score: *${score}*\n\n` +
+        `📈 Nuevas posiciones:\n` +
+        `  • ${winnerName}: #${newWinnerPosition}\n` +
+        `  • ${loserName}: #${newLoserPosition}`,
     );
   }
 
   // ─── Notificaciones existentes ────────────────────────────────────────────
 
-  async sendChallengeNotification(challengerName: string, challengedName: string, challengedPhone: string) {
-    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
-    
-    return this.sendMessage(challengedPhone,
+  async sendChallengeNotification(
+    challengerName: string,
+    challengedName: string,
+    challengedPhone: string,
+  ) {
+    const appUrl =
+      process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
+
+    return this.sendMessage(
+      challengedPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `¡Tienes un nuevo desafío!\n` +
-      `*${challengerName}* te ha desafiado.\n\n` +
-      `⏰ Tienes 24 horas para responder.\n\n` +
-      `👉 Ver mis desafíos:\n` +
-      `${appUrl}/fixture`
+        `¡Tienes un nuevo desafío!\n` +
+        `*${challengerName}* te ha desafiado.\n\n` +
+        `⏰ Tienes 24 horas para responder.\n\n` +
+        `👉 Ver mis desafíos:\n` +
+        `${appUrl}/fixture`,
     );
   }
 
-  async sendAcceptedNotification(challengerName: string, challengedName: string, challengerPhone: string) {
-    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
-    
-    return this.sendMessage(challengerPhone,
+  async sendAcceptedNotification(
+    challengerName: string,
+    challengedName: string,
+    challengerPhone: string,
+  ) {
+    const appUrl =
+      process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
+
+    return this.sendMessage(
+      challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `✅ *${challengedName}* aceptó tu desafío!\n\n` +
-      `⏰ Tienen 5 días para jugar.\n\n` +
-      `👉 Coordinar partido:\n` +
-      `${appUrl}/fixture`
+        `✅ *${challengedName}* aceptó tu desafío!\n\n` +
+        `⏰ Tienen 5 días para jugar.\n\n` +
+        `👉 Coordinar partido:\n` +
+        `${appUrl}/fixture`,
     );
   }
 
-  async sendRejectedNotification(challengerName: string, challengedName: string, challengerPhone: string) {
-    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
-    
-    return this.sendMessage(challengerPhone,
+  async sendRejectedNotification(
+    challengerName: string,
+    challengedName: string,
+    challengerPhone: string,
+  ) {
+    const appUrl =
+      process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
+
+    return this.sendMessage(
+      challengerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `❌ ${challengedName} rechazó tu desafío.\n\n` +
-      `🏆 Ganas por W.O. y subes en la escalerilla!\n\n` +
-      `👉 Ver escalerilla:\n` +
-      `${appUrl}`
+        `❌ ${challengedName} rechazó tu desafío.\n\n` +
+        `🏆 Ganas por W.O. y subes en la escalerilla!\n\n` +
+        `👉 Ver escalerilla:\n` +
+        `${appUrl}`,
     );
   }
 
-  async sendDeadlineReminder(playerName: string, opponentName: string, playerPhone: string, hoursLeft: number) {
-    const appUrl = process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
-    
-    return this.sendMessage(playerPhone,
+  async sendDeadlineReminder(
+    playerName: string,
+    opponentName: string,
+    playerPhone: string,
+    hoursLeft: number,
+  ) {
+    const appUrl =
+      process.env.FRONTEND_URL || 'https://escalerilla.clubdetenisgraneros.cl/';
+
+    return this.sendMessage(
+      playerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `⏰ *RECORDATORIO*\n\n` +
-      `Tu partido contra *${opponentName}* vence en ${hoursLeft} horas.\n\n` +
-      `👉 Reportar resultado:\n` +
-      `${appUrl}/fixture`
+        `⏰ *RECORDATORIO*\n\n` +
+        `Tu partido contra *${opponentName}* vence en ${hoursLeft} horas.\n\n` +
+        `👉 Reportar resultado:\n` +
+        `${appUrl}/fixture`,
     );
   }
 
-  async sendPasswordResetLink(playerName: string, playerPhone: string, resetLink: string) {
-    return this.sendMessage(playerPhone,
+  async sendPasswordResetLink(
+    playerName: string,
+    playerPhone: string,
+    resetLink: string,
+  ) {
+    return this.sendMessage(
+      playerPhone,
       `🎾 *Club de Tenis Graneros*\n\n` +
-      `Hola *${playerName}*\n\n` +
-      `Solicitud de cambio de contraseña.\n\n` +
-      `👉 Cambiar contraseña:\n` +
-      `${resetLink}\n\n` +
-      `⏰ Expira en 1 hora.`
+        `Hola *${playerName}*\n\n` +
+        `Solicitud de cambio de contraseña.\n\n` +
+        `👉 Cambiar contraseña:\n` +
+        `${resetLink}\n\n` +
+        `⏰ Expira en 1 hora.`,
     );
   }
 

@@ -1,5 +1,13 @@
 import {
-  IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, MinLength,
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
 } from 'class-validator';
 
 const MEMBER_TYPES = ['socio', 'hijo_socio', 'profe'];

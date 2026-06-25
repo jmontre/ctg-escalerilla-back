@@ -27,7 +27,7 @@ export class ChallengesCronService {
     private prisma: PrismaService,
     private rules: ChallengeRulesService,
     private appLogger: AppLogger,
-  ) { }
+  ) {}
 
   @Cron(EVERY_6_HOURS)
   async handleExpiredChallenges() {
@@ -39,8 +39,8 @@ export class ChallengesCronService {
     let notConfirmed = 0;
 
     try {
-      notAccepted  = await this.handleNotAccepted(now);
-      notPlayed    = await this.handleNotPlayed(now);
+      notAccepted = await this.handleNotAccepted(now);
+      notPlayed = await this.handleNotPlayed(now);
       notConfirmed = await this.handleNotConfirmed(now);
 
       this.logger.log(`✅ Procesamiento completo:`);
@@ -55,33 +55,46 @@ export class ChallengesCronService {
   private async handleNotAccepted(now: Date): Promise<number> {
     const expired = await this.prisma.challenge.findMany({
       where: { status: 'pending', accept_deadline: { lt: now } },
-      include: { challenger: true, challenged: true }
+      include: { challenger: true, challenged: true },
     });
 
     for (const challenge of expired) {
-      this.logger.warn(`⏱️  Desafío expirado (no aceptado): ${challenge.challenger.name} vs ${challenge.challenged.name}`);
+      this.logger.warn(
+        `⏱️  Desafío expirado (no aceptado): ${challenge.challenger.name} vs ${challenge.challenged.name}`,
+      );
 
-      await this.rules.processWin(challenge.id, challenge.challenger_id, challenge.challenged_id);
-      await this.rules.applyPostMatchStatus(challenge.challenger_id, challenge.challenged_id);
+      await this.rules.processWin(
+        challenge.id,
+        challenge.challenger_id,
+        challenge.challenged_id,
+      );
+      await this.rules.applyPostMatchStatus(
+        challenge.challenger_id,
+        challenge.challenged_id,
+      );
 
       await this.prisma.challenge.update({
         where: { id: challenge.id },
-        data: { status: 'expired_not_accepted', resolved_at: now }
+        data: { status: 'expired_not_accepted', resolved_at: now },
       });
 
       // Notificar al grupo
       try {
-        const winner = await this.prisma.player.findUnique({ where: { id: challenge.challenger_id } });
-        const loser  = await this.prisma.player.findUnique({ where: { id: challenge.challenged_id } });
+        const winner = await this.prisma.player.findUnique({
+          where: { id: challenge.challenger_id },
+        });
+        const loser = await this.prisma.player.findUnique({
+          where: { id: challenge.challenged_id },
+        });
         const groupId = process.env.WHATSAPP_GROUP_ID;
 
         if (groupId && winner && loser) {
           await whatsappService.sendGroupMessage(
             groupId,
             `🎾 *Escalerilla CTG — W.O. automático*\n\n` +
-            `🏆 *${winner.name}* gana por W.O.\n` +
-            `${loser.name} no respondió el desafío a tiempo.\n\n` +
-            `📈 ${winner.name}: #${winner.position}`
+              `🏆 *${winner.name}* gana por W.O.\n` +
+              `${loser.name} no respondió el desafío a tiempo.\n\n` +
+              `📈 ${winner.name}: #${winner.position}`,
           );
         }
       } catch (err) {
@@ -89,7 +102,10 @@ export class ChallengesCronService {
       }
 
       this.logger.log(`✅ W.O. aplicado: ${challenge.challenger.name} sube`);
-      this.appLogger.challengeExpiredNotAccepted(challenge.challenger.name, challenge.challenged.name);
+      this.appLogger.challengeExpiredNotAccepted(
+        challenge.challenger.name,
+        challenge.challenged.name,
+      );
     }
 
     return expired.length;
@@ -98,17 +114,19 @@ export class ChallengesCronService {
   private async handleNotPlayed(now: Date): Promise<number> {
     const expired = await this.prisma.challenge.findMany({
       where: { status: 'accepted', play_deadline: { lt: now } },
-      include: { challenger: true, challenged: true }
+      include: { challenger: true, challenged: true },
     });
 
     for (const challenge of expired) {
-      this.logger.warn(`⏱️  Desafío expirado (no jugado): ${challenge.challenger.name} vs ${challenge.challenged.name}`);
+      this.logger.warn(
+        `⏱️  Desafío expirado (no jugado): ${challenge.challenger.name} vs ${challenge.challenged.name}`,
+      );
 
       await this.penalizeBothPlayers(challenge);
 
       await this.prisma.challenge.update({
         where: { id: challenge.id },
-        data: { status: 'expired_not_played', resolved_at: now }
+        data: { status: 'expired_not_played', resolved_at: now },
       });
 
       // Notificar al grupo
@@ -118,8 +136,8 @@ export class ChallengesCronService {
           await whatsappService.sendGroupMessage(
             groupId,
             `🎾 *Escalerilla CTG — Partido no jugado*\n\n` +
-            `⏰ ${challenge.challenger.name} vs ${challenge.challenged.name}\n` +
-            `El partido venció sin jugarse. Se aplicó penalización.`
+              `⏰ ${challenge.challenger.name} vs ${challenge.challenged.name}\n` +
+              `El partido venció sin jugarse. Se aplicó penalización.`,
           );
         }
       } catch (err) {
@@ -127,7 +145,10 @@ export class ChallengesCronService {
       }
 
       this.logger.log(`✅ Penalización aplicada`);
-      this.appLogger.challengeExpiredNotPlayed(challenge.challenger.name, challenge.challenged.name);
+      this.appLogger.challengeExpiredNotPlayed(
+        challenge.challenger.name,
+        challenge.challenged.name,
+      );
     }
 
     return expired.length;
@@ -136,13 +157,15 @@ export class ChallengesCronService {
   private async handleNotConfirmed(now: Date): Promise<number> {
     const allAccepted = await this.prisma.challenge.findMany({
       where: { status: 'accepted' },
-      include: { challenger: true, challenged: true }
+      include: { challenger: true, challenged: true },
     });
 
-    const pending = allAccepted.filter(c => {
+    const pending = allAccepted.filter((c) => {
       const hasChallenger = c.challenger_result !== null;
       const hasChallenged = c.challenged_result !== null;
-      return (hasChallenger && !hasChallenged) || (!hasChallenger && hasChallenged);
+      return (
+        (hasChallenger && !hasChallenged) || (!hasChallenger && hasChallenged)
+      );
     });
 
     let processed = 0;
@@ -151,23 +174,28 @@ export class ChallengesCronService {
       const referenceTime = challenge.first_result_at ?? challenge.accepted_at;
       if (!referenceTime) continue;
 
-      const hoursSinceFirstResult = (now.getTime() - new Date(referenceTime).getTime()) / (1000 * 60 * 60);
+      const hoursSinceFirstResult =
+        (now.getTime() - new Date(referenceTime).getTime()) / (1000 * 60 * 60);
 
       if (hoursSinceFirstResult < HOURS_TO_CONFIRM_RESULT) {
         this.logger.log(
           `⏳ ${challenge.challenger.name} vs ${challenge.challenged.name}: ` +
-          `${hoursSinceFirstResult.toFixed(1)}h desde primer resultado (mínimo ${HOURS_TO_CONFIRM_RESULT}h)`
+            `${hoursSinceFirstResult.toFixed(1)}h desde primer resultado (mínimo ${HOURS_TO_CONFIRM_RESULT}h)`,
         );
         continue;
       }
 
-      this.logger.warn(`⏱️  Resultado sin doble confirmación: ${challenge.challenger.name} vs ${challenge.challenged.name}`);
+      this.logger.warn(
+        `⏱️  Resultado sin doble confirmación: ${challenge.challenger.name} vs ${challenge.challenged.name}`,
+      );
 
-      const confirmedResult: any = challenge.challenger_result || challenge.challenged_result;
+      const confirmedResult: any =
+        challenge.challenger_result || challenge.challenged_result;
       const winnerId = confirmedResult.winnerId;
-      const loserId  = winnerId === challenge.challenger_id
-        ? challenge.challenged_id
-        : challenge.challenger_id;
+      const loserId =
+        winnerId === challenge.challenger_id
+          ? challenge.challenged_id
+          : challenge.challenger_id;
 
       await this.rules.processWin(challenge.id, winnerId, loserId);
       await this.rules.applyPostMatchStatus(winnerId, loserId);
@@ -176,53 +204,65 @@ export class ChallengesCronService {
       await this.prisma.challenge.update({
         where: { id: challenge.id },
         data: {
-          status:        'completed',
-          winner_id:     winnerId,
-          final_score:   confirmedResult.score,
+          status: 'completed',
+          winner_id: winnerId,
+          final_score: confirmedResult.score,
           results_match: false,
-          played_at:     now,
-          resolved_at:   now
-        }
+          played_at: now,
+          resolved_at: now,
+        },
       });
 
       // Notificar al grupo
       try {
-        const winner = await this.prisma.player.findUnique({ where: { id: winnerId } });
-        const loser  = await this.prisma.player.findUnique({ where: { id: loserId }  });
+        const winner = await this.prisma.player.findUnique({
+          where: { id: winnerId },
+        });
+        const loser = await this.prisma.player.findUnique({
+          where: { id: loserId },
+        });
         const groupId = process.env.WHATSAPP_GROUP_ID;
 
         if (groupId && winner && loser) {
           await whatsappService.sendGroupMessage(
             groupId,
             `🎾 *Escalerilla CTG — Resultado auto-validado*\n\n` +
-            `🏆 *${winner.name}* venció a *${loser.name}*\n` +
-            `📊 Score: *${confirmedResult.score}*\n\n` +
-            `📈 Nuevas posiciones:\n` +
-            `  • ${winner.name}: #${winner.position}\n` +
-            `  • ${loser.name}: #${loser.position}\n\n` +
-            `_(Solo un jugador confirmó el resultado)_`
+              `🏆 *${winner.name}* venció a *${loser.name}*\n` +
+              `📊 Score: *${confirmedResult.score}*\n\n` +
+              `📈 Nuevas posiciones:\n` +
+              `  • ${winner.name}: #${winner.position}\n` +
+              `  • ${loser.name}: #${loser.position}\n\n` +
+              `_(Solo un jugador confirmó el resultado)_`,
           );
         }
 
         // Notificar al jugador que no confirmó
-        const nonConfirmer = challenge.challenger_result ? challenge.challenged : challenge.challenger;
+        const nonConfirmer = challenge.challenger_result
+          ? challenge.challenged
+          : challenge.challenger;
         if (nonConfirmer.phone) {
           await whatsappService.sendMessage(
             nonConfirmer.phone,
             `🎾 *Club de Tenis Graneros*\n\n` +
-            `⏰ El resultado del partido vs ${challenge.challenger_result ? challenge.challenger.name : challenge.challenged.name} fue auto-validado porque no ingresaste tu resultado a tiempo.\n\n` +
-            `Score registrado: ${confirmedResult.score}`
+              `⏰ El resultado del partido vs ${challenge.challenger_result ? challenge.challenger.name : challenge.challenged.name} fue auto-validado porque no ingresaste tu resultado a tiempo.\n\n` +
+              `Score registrado: ${confirmedResult.score}`,
           );
         }
       } catch (err) {
         this.logger.error('⚠️ Error notificando resultado auto-validado:', err);
       }
 
-      this.logger.log(`✅ Resultado auto-validado (${HOURS_TO_CONFIRM_RESULT}h sin confirmación)`);
+      this.logger.log(
+        `✅ Resultado auto-validado (${HOURS_TO_CONFIRM_RESULT}h sin confirmación)`,
+      );
       this.appLogger.challengeAutoValidated(
-        winnerId === challenge.challenger_id ? challenge.challenger.name : challenge.challenged.name,
-        winnerId === challenge.challenger_id ? challenge.challenged.name : challenge.challenger.name,
-        confirmedResult.score
+        winnerId === challenge.challenger_id
+          ? challenge.challenger.name
+          : challenge.challenged.name,
+        winnerId === challenge.challenger_id
+          ? challenge.challenged.name
+          : challenge.challenger.name,
+        confirmedResult.score,
       );
       processed++;
     }
@@ -232,36 +272,66 @@ export class ChallengesCronService {
 
   private async penalizeBothPlayers(challenge: any) {
     const challenger = await this.prisma.player.findUnique({
-      where: { id: challenge.challenger_id }
+      where: { id: challenge.challenger_id },
     });
 
-    if (!challenger) { console.log('⚠️  Challenger no existe'); return; }
+    if (!challenger) {
+      console.log('⚠️  Challenger no existe');
+      return;
+    }
 
-    console.log(`⚠️  Penalizando solo al challenger: ${challenger.name} (pos ${challenger.position})`);
+    console.log(
+      `⚠️  Penalizando solo al challenger: ${challenger.name} (pos ${challenger.position})`,
+    );
 
     const playerBelow = await this.prisma.player.findFirst({
-      where: { position: challenger.position + 1 }
+      where: { position: challenger.position + 1 },
     });
 
     const ops: Prisma.PrismaPromise<unknown>[] = [
       this.prisma.rankingHistory.create({
-        data: { player_id: challenger.id, old_position: challenger.position, position: challenger.position + 1, reason: 'penalty' }
+        data: {
+          player_id: challenger.id,
+          old_position: challenger.position,
+          position: challenger.position + 1,
+          reason: 'penalty',
+        },
       }),
     ];
 
     if (playerBelow) {
       ops.push(
         this.prisma.rankingHistory.create({
-          data: { player_id: playerBelow.id, old_position: playerBelow.position, position: playerBelow.position - 1, reason: 'opponent_penalty' }
+          data: {
+            player_id: playerBelow.id,
+            old_position: playerBelow.position,
+            position: playerBelow.position - 1,
+            reason: 'opponent_penalty',
+          },
         }),
       );
     }
 
-    ops.push(this.prisma.player.update({ where: { id: challenger.id }, data: { position: 9999 } }));
+    ops.push(
+      this.prisma.player.update({
+        where: { id: challenger.id },
+        data: { position: 9999 },
+      }),
+    );
     if (playerBelow) {
-      ops.push(this.prisma.player.update({ where: { id: playerBelow.id }, data: { position: challenger.position } }));
+      ops.push(
+        this.prisma.player.update({
+          where: { id: playerBelow.id },
+          data: { position: challenger.position },
+        }),
+      );
     }
-    ops.push(this.prisma.player.update({ where: { id: challenger.id }, data: { position: challenger.position + 1 } }));
+    ops.push(
+      this.prisma.player.update({
+        where: { id: challenger.id },
+        data: { position: challenger.position + 1 },
+      }),
+    );
 
     await this.prisma.$transaction(ops);
 
@@ -290,7 +360,7 @@ export class ChallengesCronService {
         if (endTime < now) {
           await this.prisma.reservation.update({
             where: { id: reservation.id },
-            data:  { status: 'completed', cancelled_at: endTime }
+            data: { status: 'completed', cancelled_at: endTime },
           });
           completed++;
         }
@@ -305,7 +375,9 @@ export class ChallengesCronService {
 
   @Cron(EVERY_MONDAY_MIDNIGHT)
   async handleWeeklyHighDemandReset() {
-    this.logger.log('🔄 Lunes 00:00 — Cupos de alta demanda restaurados automáticamente.');
+    this.logger.log(
+      '🔄 Lunes 00:00 — Cupos de alta demanda restaurados automáticamente.',
+    );
 
     try {
       // El cupo es query-based (se cuenta contra el rango lunes-domingo),
@@ -316,11 +388,13 @@ export class ChallengesCronService {
         select: { id: true, name: true, member_type: true },
       });
 
-      const socios    = players.filter(p => p.member_type === 'socio').length;
-      const hijos     = players.filter(p => p.member_type === 'hijo_socio').length;
+      const socios = players.filter((p) => p.member_type === 'socio').length;
+      const hijos = players.filter(
+        (p) => p.member_type === 'hijo_socio',
+      ).length;
 
       this.logger.log(
-        `✅ Reset semanal: ${socios} socios (2 cupos c/u) · ${hijos} hijos de socio (1 cupo c/u)`
+        `✅ Reset semanal: ${socios} socios (2 cupos c/u) · ${hijos} hijos de socio (1 cupo c/u)`,
       );
     } catch (error) {
       this.logger.error('❌ Error en reset semanal de cupos:', error);

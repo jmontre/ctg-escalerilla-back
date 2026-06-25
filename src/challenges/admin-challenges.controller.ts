@@ -10,7 +10,7 @@ export class AdminChallengesController {
   @Post(':id/resolve')
   async resolveChallenge(
     @Param('id') id: string,
-    @Body() data: { winnerId: string; score: string }
+    @Body() data: { winnerId: string; score: string },
   ) {
     return this.adminService.resolveChallenge(id, data.winnerId, data.score);
   }
@@ -28,7 +28,7 @@ export class AdminChallengesController {
   @Post(':id/extend')
   async extendDeadline(
     @Param('id') id: string,
-    @Body() data: { hours: number; type: 'accept' | 'play' }
+    @Body() data: { hours: number; type: 'accept' | 'play' },
   ) {
     return this.adminService.extendDeadline(id, data.hours, data.type);
   }

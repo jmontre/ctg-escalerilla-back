@@ -1,4 +1,17 @@
-import { Controller, Get, Put, Post, Delete, Param, Body, Headers, Request, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Delete,
+  Param,
+  Body,
+  Headers,
+  Request,
+  UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { JwtService } from '@nestjs/jwt';
 import { Public } from '../auth/public.decorator';
@@ -8,7 +21,7 @@ export class PlayersController {
   constructor(
     private playersService: PlayersService,
     private jwtService: JwtService,
-  ) { }
+  ) {}
 
   @Public()
   @Get()
@@ -19,14 +32,19 @@ export class PlayersController {
   @Get('user/:userId')
   findByUserId(@Param('userId') userId: string, @Request() req: any) {
     if (userId !== req.user.sub && !req.user.is_admin) {
-      throw new ForbiddenException('No tienes permiso para acceder a este perfil');
+      throw new ForbiddenException(
+        'No tienes permiso para acceder a este perfil',
+      );
     }
     return this.playersService.findByUserId(userId);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req: any) {
-    return this.playersService.findOne(id, { sub: req.user.sub, is_admin: req.user.is_admin });
+    return this.playersService.findOne(id, {
+      sub: req.user.sub,
+      is_admin: req.user.is_admin,
+    });
   }
 
   @Get(':id/available-challenges')
@@ -41,12 +59,13 @@ export class PlayersController {
   @Put('me')
   async updateMe(
     @Headers('authorization') auth: string,
-    @Body() body: {
+    @Body()
+    body: {
       name?: string;
       phone?: string;
       current_password?: string;
       new_password?: string;
-    }
+    },
   ) {
     const userId = this.getUserIdFromToken(auth);
     return this.playersService.updateMe(userId, body);
@@ -59,7 +78,7 @@ export class PlayersController {
   @Post('me/avatar')
   async uploadAvatar(
     @Headers('authorization') auth: string,
-    @Body() body: { image: string }
+    @Body() body: { image: string },
   ) {
     if (!body.image) throw new BadRequestException('imagen requerida');
     const userId = this.getUserIdFromToken(auth);
