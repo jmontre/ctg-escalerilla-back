@@ -5,30 +5,26 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { Public } from './public.decorator';
 
-// COOKIE_CROSS_SITE=true → SameSite=None; Secure (requerido para cross-domain HTTPS: Railway ↔ Vercel)
-// Sin esta variable (dev local) → SameSite=Lax; sin Secure (funciona en localhost same-site)
-// Setear en Railway staging Y prod. No depender de NODE_ENV para no quedar ciegos si no está.
-function isCookieSecure() {
-  return process.env.COOKIE_CROSS_SITE === 'true';
-}
-
+// Frontend (reservas.clubdetenisgraneros.cl) y backend (api.clubdetenisgraneros.cl)
+// comparten el dominio padre → SameSite=Lax alcanza, sin necesidad de SameSite=None.
+// domain: '.clubdetenisgraneros.cl' hace la cookie accesible en todos los subdominios.
 function setCookieToken(res: Response, token: string) {
-  const secure = isCookieSecure();
   res.cookie('auth_token', token, {
     httpOnly: true,
-    secure,
-    sameSite: secure ? 'none' : 'lax',
+    secure: true,
+    sameSite: 'lax',
+    domain: '.clubdetenisgraneros.cl',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
 }
 
 function clearCookieToken(res: Response) {
-  const secure = isCookieSecure();
   res.clearCookie('auth_token', {
     httpOnly: true,
-    secure,
-    sameSite: secure ? 'none' : 'lax',
+    secure: true,
+    sameSite: 'lax',
+    domain: '.clubdetenisgraneros.cl',
     path: '/',
   });
 }
