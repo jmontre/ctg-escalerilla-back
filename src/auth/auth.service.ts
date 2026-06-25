@@ -29,18 +29,16 @@ export class AuthService {
       data: { username: dto.username, email: dto.email, password_hash },
     });
 
-    const lastPlayer = await this.prisma.player.findFirst({
-      orderBy: { position: 'desc' },
-    });
-    const nextPosition = (lastPlayer?.position || 0) + 1;
-
+    // El registro público NO asigna posición automática en la escalerilla.
+    // Un admin debe asignarla manualmente desde el panel de administración.
+    // Esto evita que cuentas no verificadas contaminen el ranking del club.
     const player = await this.prisma.player.create({
       data: {
         user_id:  user.id,
         name:     dto.name,
         email:    dto.email,
         phone:    dto.phone,
-        position: nextPosition,
+        position: null,
       },
     });
 

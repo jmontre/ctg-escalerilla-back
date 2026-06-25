@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChallengeRulesService } from './challenge-rules.service';
 import { whatsappService } from '../notifications/whatsapp.service';
@@ -21,6 +21,16 @@ export class ChallengesService {
   ) {}
 
   private sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+  /** Resuelve el player_id a partir del userId del JWT. */
+  async getPlayerIdFromUserId(userId: string): Promise<string> {
+    const player = await this.prisma.player.findUnique({
+      where: { user_id: userId },
+      select: { id: true },
+    });
+    if (!player) throw new NotFoundException('Jugador no encontrado para este usuario');
+    return player.id;
+  }
 
   /** Dispara notificaciones sin bloquear la respuesta HTTP. */
   private notifyAsync(task: () => Promise<void>) {
