@@ -37,7 +37,7 @@ export class JwtAuthGuard implements CanActivate {
     const auth: string | undefined = request.headers?.authorization;
     if (auth?.startsWith('Bearer ')) return auth.slice(7);
 
-    // Fallback: cookie httpOnly (cross-origin prod: SameSite=None; dev: SameSite=Lax)
+    // Fallback: cookie httpOnly — mismo dominio padre, SameSite=Lax
     const cookieHeader: string = request.headers?.cookie || '';
     for (const part of cookieHeader.split(';')) {
       const eqIdx = part.indexOf('=');
