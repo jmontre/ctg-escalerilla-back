@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Get, Req, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -33,6 +34,7 @@ function clearCookieToken(res: Response) {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Public()
   @Post('register')
   async register(
@@ -44,6 +46,7 @@ export class AuthController {
     return result;
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Public()
   @Post('login')
   async login(
@@ -68,12 +71,14 @@ export class AuthController {
     return { message: 'Sesión cerrada' };
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Public()
   @Post('forgot-password')
   async forgotPassword(@Body() body: { username: string }) {
     return this.authService.forgotPassword(body.username);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Public()
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; password: string }) {
