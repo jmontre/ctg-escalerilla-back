@@ -10,6 +10,10 @@ async function bootstrap() {
     logger: new ChileLogger(),
   });
 
+  // Detrás de Cloudflare + Railway: req.ip es la IP real del usuario, no del proxy.
+  // Sin esto el throttler ve a todos como la misma IP y el rate limiting no funciona.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   // Aumentar límite para subida de imágenes en base64

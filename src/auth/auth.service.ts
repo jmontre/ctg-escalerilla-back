@@ -151,11 +151,8 @@ export class AuthService {
     };
 
     if (!user || !user.player) return genericResponse;
-    if (!user.player.phone) {
-      throw new BadRequestException(
-        'Tu cuenta no tiene un número de teléfono registrado. Contacta al administrador.',
-      );
-    }
+    // No revelar que el usuario existe pero no tiene teléfono — anti-enumeración.
+    if (!user.player.phone) return genericResponse;
 
     await this.prisma.passwordResetToken.updateMany({
       where: { user_id: user.id, used: false },
@@ -177,7 +174,8 @@ export class AuthService {
       .sendPasswordResetLink(user.player.name, user.player.phone, resetLink)
       .catch((err) => console.error('Error enviando WhatsApp reset:', err));
 
-    this.appLogger.passwordReset(user.player.name, user.player.phone);
+    const maskedPhone = user.player.phone.replace(/(\d{3})\d+(\d{3})$/, '$1****$2');
+    this.appLogger.passwordReset(user.player.name, maskedPhone);
     return genericResponse;
   }
 
