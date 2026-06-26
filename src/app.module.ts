@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { PlayersModule } from './players/players.module';
@@ -18,6 +20,8 @@ import { CommonModule } from './common/common.module';
       envFilePath:
         process.env.NODE_ENV === 'production' ? '.env.production' : '.env.dev',
     }),
+    // Red de seguridad global: 100 req/min por IP. El uso normal del club no lo roza.
+    ThrottlerModule.forRoot([{ name: 'global', ttl: 60_000, limit: 100 }]),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
@@ -29,5 +33,6 @@ import { CommonModule } from './common/common.module';
     CommonModule,
   ],
   controllers: [TestController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}
