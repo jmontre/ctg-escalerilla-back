@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { whatsappService } from './notifications/whatsapp.service';
 import { ChileLogger } from './common/chile-logger';
 import * as bodyParser from 'body-parser';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -14,6 +15,7 @@ async function bootstrap() {
   // Sin esto el throttler ve a todos como la misma IP y el rate limiting no funciona.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
+  app.use(helmet());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   // Aumentar límite para subida de imágenes en base64
